@@ -1,0 +1,8 @@
+# Salinan template — installer membuat versi final di /etc/caddy/Caddyfile
+photobooth.example.com {
+    encode gzip
+    reverse_proxy 127.0.0.1:3800
+    request_body {
+        max_size 200MB
+    }
+}

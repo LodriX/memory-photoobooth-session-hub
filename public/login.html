@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Masuk — Memory Photobooth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Epilogue:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="icon" type="image/png" href="/logo.png" />
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <img class="lp-logo" src="/logo.png" alt="Memory Photobooth" />
+      <h1>Memory Photobooth</h1>
+      <p class="lp-sub">For Your Precious Memories</p>
+
+      <form id="login-form" autocomplete="on">
+        <input id="username" class="lp-input" type="text" name="username"
+               placeholder="Username" autocomplete="username" required />
+        <input id="password" class="lp-input" type="password" name="password"
+               placeholder="Password" autocomplete="current-password" required />
+        <p id="login-error" class="lp-error" role="alert"></p>
+        <button id="login-btn" class="btn lp-btn" type="submit">Masuk</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="/login.js"></script>
+</body>
+</html>

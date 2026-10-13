@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sesi — Memory Photobooth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Epilogue:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="icon" type="image/png" href="/logo.png" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand-logo" src="/logo.png" alt="Memory Photobooth" />
+      <div>
+        <h1>Memory Photobooth</h1>
+        <p id="event-name">Memuat...</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <a class="btn ghost" href="/">Dashboard</a>
+    </div>
+  </header>
+
+  <main>
+    <div id="banner" class="banner hidden"></div>
+
+    <div class="session-wrap">
+      <section class="panel">
+        <h2 id="title">&mdash;</h2>
+        <div class="sub" id="subtitle">&mdash;</div>
+
+        <div id="upload-status" class="upload-status hidden">
+          <div class="u-label"><span>Status unggah ke server online</span><b id="upload-state">ANTRE</b></div>
+          <div class="bar indeterminate"><i></i></div>
+          <div class="bar-text" id="upload-info">File akan otomatis terkirim ke server.</div>
+        </div>
+
+        <div id="feature" class="feature hidden">
+          <img id="feature-img" alt="Template" />
+          <div class="cap" id="feature-cap"></div>
+        </div>
+
+        <div id="photos" class="photos"></div>
+      </section>
+
+      <aside class="panel qr-box">
+        <h2>QR Sesi</h2>
+        <div class="sub">Scan untuk membuka halaman ini di HP</div>
+        <img id="qr" alt="QR sesi" />
+        <p class="url" id="url"></p>
+        <div class="row">
+          <button class="btn" id="btn-copy">Salin link</button>
+          <a class="btn ghost" id="btn-qr-dl" download>Unduh QR</a>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <button class="btn magenta" id="btn-zip" style="flex:1">Unduh semua (ZIP)</button>
+        </div>
+        <div id="zip-progress" class="bar hidden" style="margin-top:8px"><i style="width:0%"></i></div>
+        <div class="bar-text hidden" id="zip-info"></div>
+
+        <div class="row" style="margin-top:8px">
+          <button class="btn ghost" id="btn-collage" style="flex:1">Unduh kolase (4 foto + QR)</button>
+        </div>
+
+        <ul class="files" id="files"></ul>
+      </aside>
+    </div>
+  </main>
+
+  <div id="lightbox" class="lightbox hidden" onclick="this.classList.add('hidden')">
+    <img id="lightbox-img" alt="" />
+  </div>
+
+  <script src="/session.js"></script>
+</body>
+</html>

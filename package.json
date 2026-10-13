@@ -1,0 +1,20 @@
+{
+  "name": "sessionhub",
+  "version": "1.0.0",
+  "description": "Monitor output DSLRBooth, gabungkan 4 foto + 1 print per sesi, tampilkan di web gallery + QR otomatis",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "validate": "node scripts/validate.js",
+    "setpass": "node scripts/setpass.js"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "adm-zip": "^0.6.1",
+    "chokidar": "^5.0.0",
+    "express": "^5.3.0",
+    "multer": "^2.4.0",
+    "qrcode": "^1.5.4"
+  }
+}

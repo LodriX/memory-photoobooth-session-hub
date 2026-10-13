@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Memory Photobooth — Galeri Sesi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Epilogue:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="icon" type="image/png" href="/logo.png" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand-logo" src="/logo.png" alt="Memory Photobooth" />
+      <div>
+        <h1>Memory Photobooth</h1>
+        <p class="tagline">For Your Precious Memories</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span id="live-badge" class="badge live off">MEMUAT</span>
+      <button id="lan-chip" class="chip" title="Klik untuk menyalin alamat galeri">&mdash;</button>
+      <button id="btn-rescan" class="btn ghost">REFRESH</button>
+      <button id="btn-logout" class="btn ghost" title="Keluar dari dashboard">Keluar</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="stats" id="stats">
+      <div class="stat"><span class="stat-num" id="stat-total">&mdash;</span><span class="stat-label">Total sesi</span></div>
+      <div class="stat"><span class="stat-num" id="stat-ready">&mdash;</span><span class="stat-label">Siap (4 foto + template)</span></div>
+      <div class="stat warn"><span class="stat-num" id="stat-incomplete">&mdash;</span><span class="stat-label">Belum lengkap</span></div>
+      <div class="stat"><span class="stat-num" id="stat-extra">&mdash;</span><span class="stat-label" id="stat-extra-label">Event</span></div>
+    </section>
+    <p id="stats-error" class="stats-error hidden" role="alert"></p>
+
+    <section class="toolbar">
+      <input id="search" type="search" placeholder="cari id / event..." />
+      <select id="filter-status">
+        <option value="">Semua status</option>
+        <option value="ready">Siap</option>
+        <option value="incomplete">Belum lengkap</option>
+      </select>
+      <span id="scan-hint" class="hint"></span>
+    </section>
+
+    <section id="event-chips" class="chips"></section>
+
+    <section id="grid-root"></section>
+    <section id="empty" class="empty hidden">
+      Belum ada sesi. Foto baru dari DSLRBooth akan otomatis muncul di sini.
+    </section>
+    <button id="load-more" class="btn wide hidden">Muat lebih banyak</button>
+  </main>
+
+  <footer class="footer">
+    <span id="foot-root"></span>
+    <span id="foot-scan"></span>
+  </footer>
+
+  <div id="qr-modal" class="modal hidden">
+    <div class="modal-box">
+      <button class="modal-close" onclick="closeModal()">X</button>
+      <h3 id="modal-title"></h3>
+      <img id="modal-qr" alt="QR sesi" />
+      <p id="modal-link" class="mono"></p>
+      <div class="row">
+        <button class="btn" onclick="copyModalLink()">Salin link</button>
+        <a id="modal-download" class="btn ghost" download>Unduh QR</a>
+        <a id="modal-open" class="btn ghost" target="_blank">Buka</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

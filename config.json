@@ -1,0 +1,30 @@
+{
+  "rootDir": "C:\\dslrBooth",
+  "port": 3800,
+
+  "photosPerSession": 4,
+  "singleToPrintWindowSec": 150,
+  "idleGapSec": 30,
+  "leftoverClusterGapSec": 300,
+
+  "baseUrl": "",
+
+  "pushToken": "",
+
+  "auth": {
+    "adminPassword": ""
+  },
+
+  "cloud": {
+    "enabled": false,
+    "url": "",
+    "token": "",
+    "uploadIncomplete": false,
+    "uploadSince": "",
+    "retrySec": 60,
+    "tickSec": 10
+  },
+
+  "scanDebounceMs": 800,
+  "rootRescanSec": 60
+}
