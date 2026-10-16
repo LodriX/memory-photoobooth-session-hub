@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "test": "node --test",
     "validate": "node scripts/validate.js",
     "setpass": "node scripts/setpass.js"
   },

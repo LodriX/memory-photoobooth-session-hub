@@ -10,7 +10,7 @@ const { Scanner } = require('../lib/scanner');
 (async () => {
   const cfg = loadConfig();
   console.log('Root           :', cfg.rootDir);
-  console.log('Foto/sesi      :', cfg.photosPerSession);
+  console.log('Maks foto/sesi :', cfg.photosPerSession);
   console.log('Jendela foto-print:', cfg.singleToPrintWindowSec + ' dtk');
   console.log('Idle gap       :', cfg.idleGapSec + ' dtk');
   console.log('');
