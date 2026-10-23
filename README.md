@@ -132,7 +132,8 @@ npm run validate
 
 ## Konfigurasi
 
-Semua di `config.json`:
+Semua di `config.json` (di server VPS: `/opt/sessionhub/data/config.json`,
+dibaca lewat env `SESSIONHUB_CONFIG`):
 
 | Kunci | Default | Arti |
 |---|---|---|
@@ -173,8 +174,10 @@ Semua di `config.json`:
    ```
 
 2. Di **server**, isi `pushToken` dengan token yang sama dan `baseUrl` domain.
-3. Ikuti langkah pemasangan di **[DEPLOY.md](DEPLOY.md)** (Node, Caddy/HTTPS,
-   firewall, systemd auto-restart).
+   Konfigurasi server disimpan di **`/opt/sessionhub/data/config.json`**
+   (di luar repo, permission `600`).
+3. Ikuti panduan lengkap dari nol di **[DEPLOY.md](DEPLOY.md)** (VPS, DNS,
+   Node, Caddy/HTTPS, firewall, systemd auto-restart).
 
 Setelah aktif: sesi lengkap diunggah otomatis; bila internet putus, sesi tetap
 tersimpan lokal dan diunggah ulang saat koneksi kembali. QR yang dibuat booth

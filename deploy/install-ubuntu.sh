@@ -29,9 +29,16 @@ if [ ! -f "$APP_DIR/server.js" ]; then
   exit 1
 fi
 cd "$APP_DIR"
-mkdir -p data
+mkdir -p data/media
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
 sudo -u "$APP_USER" npm install --omit=dev --no-audit --no-fund || npm install --omit=dev --no-audit --no-fund
+
+# Konfigurasi server disimpan di data/config.json (di luar repo, tidak ikut git).
+if [ ! -f "$APP_DIR/data/config.json" ]; then
+  cp "$APP_DIR/config.json" "$APP_DIR/data/config.json"
+  chown "$APP_USER:$APP_USER" "$APP_DIR/data/config.json"
+  chmod 600 "$APP_DIR/data/config.json"
+fi
 
 echo "== 3/5 Firewall =="
 apt-get install -y ufw >/dev/null 2>&1 || true
@@ -55,6 +62,10 @@ $DOMAIN {
         max_size 200MB
     }
 }
+
+www.$DOMAIN {
+    redir https://$DOMAIN{uri} permanent
+}
 EOF
 
 echo "== 5/5 systemd =="
@@ -68,16 +79,16 @@ Type=simple
 User=$APP_USER
 WorkingDirectory=$APP_DIR
 ExecStart=/usr/bin/node server.js
-Restart=on-fallback
+Restart=on-failure
 RestartSec=5
 Environment=NODE_ENV=production
+Environment=SESSIONHUB_CONFIG=$APP_DIR/data/config.json
 
 [Install]
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
 systemctl enable sessionhub
-systemctl restart sessionhub
 systemctl restart caddy
 
 echo
@@ -86,7 +97,17 @@ echo " - App    : http://127.0.0.1:$PORT"
 echo " - Online : https://$DOMAIN  (HTTPS aktif otomatis setelah DNS mengarah ke IP VPS)"
 echo " - Log    : journalctl -u sessionhub -f"
 echo
-echo "Jangan lupa isi config.json di $APP_DIR:"
-echo "   rootDir    = $APP_DIR/data/media"
-echo "   baseUrl    = https://$DOMAIN"
-echo "   pushToken  = (token rahasia, sama dengan cloud.token di booth)"
+echo "Langkah berikutnya:"
+echo "  1. Edit konfigurasi server:"
+echo "       nano $APP_DIR/data/config.json"
+echo "     Isi minimal: rootDir=$APP_DIR/data/media"
+echo "                  baseUrl=https://$DOMAIN"
+echo "                  pushToken=<token rahasia>"
+echo "                  auth.adminPassword=<password operator>"
+echo "  2. Nyalakan aplikasi:"
+echo "       sudo systemctl start sessionhub"
+echo
+if [ -f "$APP_DIR/data/config.json" ] && grep -q 'data/media' "$APP_DIR/data/config.json"; then
+  systemctl restart sessionhub
+  echo "Config sudah berisi rootDir data/media -> service dijalankan."
+fi

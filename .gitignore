@@ -3,3 +3,4 @@ data/sessions.json
 data/users.json
 data/heartbeat.txt
 data/*.log
+data/config.json

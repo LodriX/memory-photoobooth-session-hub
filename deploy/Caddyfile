@@ -6,3 +6,7 @@ photobooth.example.com {
         max_size 200MB
     }
 }
+
+www.photobooth.example.com {
+    redir https://photobooth.example.com{uri} permanent
+}

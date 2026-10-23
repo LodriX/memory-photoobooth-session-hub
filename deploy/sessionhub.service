@@ -11,6 +11,7 @@ ExecStart=/usr/bin/node server.js
 Restart=on-failure
 RestartSec=5
 Environment=NODE_ENV=production
+Environment=SESSIONHUB_CONFIG=/opt/sessionhub/data/config.json
 
 [Install]
 WantedBy=multi-user.target
