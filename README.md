@@ -43,7 +43,7 @@ Satu aplikasi, dua peran:
 - **QR langsung aktif**: begitu sesi selesai, booth memesan (reserve) sesi ke server. Tamu bisa scan QR sebelum file selesai diunggah; halaman menampilkan status loading dan terisi otomatis.
 - **Galeri event + QR utama**: satu QR untuk semua sesi dalam event (`/e/<event>`), termasuk sesi yang masih diunggah. Tombol **QR Event** tersedia di dashboard.
 - **Hapus sesi/foto (khusus admin)**: tombol hapus hanya muncul setelah login; endpoint `DELETE` wajib autentikasi.
-- **Unduh** per foto, template, **ZIP satu sesi**, dan **kolase PNG** (foto + QR).
+- **Unduh** per foto, template, **ZIP satu sesi**, dan **kolase PNG** (foto + QR; tata letak menyesuaikan jumlah foto, tanpa sel kosong).
 - **Dashboard operator**: login, pilih event, statistik per event, kartu sesi *live* (SSE), rescan, status unggah.
 - **Statistik per event**: total sesi, siap/lengkap, belum lengkap, terunggah.
 - **Unggah otomatis ke VPS** dengan antrean + retry — internet putus tidak masalah, unggahan dilanjutkan saat kembali.

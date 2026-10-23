@@ -301,6 +301,8 @@ function render() {
   };
 
   $('btn-collage').onclick = makeCollage;
+  $('btn-collage').textContent = collageLabel();
+  $('collage-row').classList.toggle('hidden', !s.photos.length);
   $('btn-zip').onclick = downloadZip;
 }
 
@@ -407,7 +409,7 @@ function downloadZip() {
   }
 }
 
-// ---------- Kolase: 4 foto + QR, digambar di canvas browser ----------
+// ---------- Kolase: foto + QR, digambar di canvas browser ----------
 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
@@ -437,92 +439,259 @@ function drawCover(ctx, img, x, y, w, h) {
   ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
 }
 
+/** Bungkus teks judul event menjadi beberapa baris di header kolase. */
+function wrapLines(ctx, text, maxWidth) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const test = line ? line + ' ' + word : word;
+    if (!line || ctx.measureText(test).width <= maxWidth) {
+      line = test;
+    } else {
+      lines.push(line);
+      line = word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function fitTitle(ctx, text, maxWidth, maxLines, maxSize, minSize) {
+  for (let size = maxSize; size >= minSize; size -= 2) {
+    ctx.font = `600 ${size}px "Fraunces", Georgia, serif`;
+    const lines = wrapLines(ctx, text, maxWidth);
+    if (lines.length <= maxLines) return { lines, size };
+  }
+  ctx.font = `600 ${minSize}px "Fraunces", Georgia, serif`;
+  const lines = wrapLines(ctx, text, maxWidth).slice(0, maxLines);
+  if (lines.length) {
+    let last = lines[lines.length - 1];
+    while (last && ctx.measureText(last + '…').width > maxWidth) last = last.slice(0, -1);
+    lines[lines.length - 1] = last + '…';
+  }
+  return { lines, size: minSize };
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+function drawPhotoFrame(ctx, img, x, y, w, h) {
+  ctx.save();
+  ctx.shadowColor = 'rgba(75, 58, 56, .16)';
+  ctx.shadowBlur = 18;
+  ctx.shadowOffsetY = 8;
+  ctx.fillStyle = '#ffffff';
+  roundRect(ctx, x, y, w, h, 16);
+  ctx.fill();
+  ctx.restore();
+
+  const pad = 10;
+  const ix = x + pad;
+  const iy = y + pad;
+  const iw = w - pad * 2;
+  const ih = h - pad * 2;
+  ctx.save();
+  roundRect(ctx, ix, iy, iw, ih, 9);
+  ctx.clip();
+  ctx.fillStyle = '#f3e8de';
+  ctx.fillRect(ix, iy, iw, ih);
+  if (img) {
+    drawCover(ctx, img, ix, iy, iw, ih);
+  } else {
+    ctx.fillStyle = '#9a8480';
+    ctx.textAlign = 'center';
+    ctx.font = '600 18px "Epilogue", system-ui, sans-serif';
+    ctx.fillText('Foto tidak tersedia', ix + iw / 2, iy + ih / 2);
+  }
+  ctx.restore();
+}
+
+function collageLabel() {
+  const n = session && session.photos ? session.photos.length : 0;
+  return n ? `Unduh kolase (${n} foto + QR)` : 'Unduh kolase + QR';
+}
+
 async function makeCollage() {
-  if (!session) return;
+  if (!session || !session.photos || !session.photos.length) {
+    toast('Belum ada foto untuk kolase');
+    return;
+  }
   const btn = $('btn-collage');
+  const label = collageLabel();
   btn.disabled = true;
   btn.textContent = 'Membuat kolase...';
   try {
+    // Tunggu font web siap supaya hasil canvas memakai Fraunces/Epilogue.
+    try {
+      if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    } catch (_) {}
+
     const W = 1200;
-    const H = 1800;
+    const M = 48;
+    const GAP = 20;
+    const HEADER_H = 150;
+    const FOOTER_H = 300;
+    const RATIO = 2 / 3; // foto DSLRBooth 3:2 landscape -> tinggi = lebar * 2/3
+    const gridW = W - M * 2;
+    const halfW = Math.floor((gridW - GAP) / 2);
+    const halfH = Math.round(halfW * RATIO);
+    const fullH = Math.round(gridW * RATIO);
+
+    // 1 foto = full; 2 foto = dua full bertumpuk; 3+ = 2 kolom,
+    // sisa 1 foto memakai lebar penuh. Tidak ada sel kosong.
+    const n = session.photos.length;
+    const rows = [];
+    if (n <= 2) {
+      for (let i = 0; i < n; i++) {
+        rows.push([{ i, x: M, w: gridW, h: fullH }]);
+      }
+    } else {
+      let i = 0;
+      while (i < n) {
+        if (n - i === 1) {
+          rows.push([{ i, x: M, w: gridW, h: fullH }]);
+          i += 1;
+        } else {
+          rows.push([
+            { i, x: M, w: halfW, h: halfH },
+            { i: i + 1, x: M + halfW + GAP, w: halfW, h: halfH }
+          ]);
+          i += 2;
+        }
+      }
+    }
+
+    const photosH = rows.reduce((sum, row, idx) => {
+      return sum + Math.max(...row.map((cell) => cell.h)) + (idx ? GAP : 0);
+    }, 0);
+    const headerY = M;
+    const gridY = headerY + HEADER_H + 24;
+    const footerY = gridY + photosH + 28;
+    const H = footerY + FOOTER_H;
+
     const canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
     const ctx = canvas.getContext('2d');
-
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#f6efe8';
     ctx.fillRect(0, 0, W, H);
 
-    const margin = 34;
-    const gap = 18;
-    const cellW = (W - margin * 2 - gap) / 2;
-    const cellH = Math.round(cellW * 4 / 3);
-    const gridH = cellH * 2 + gap;
-    const footerY = margin + gridH + 26;
+    // ---------- header ----------
+    ctx.save();
+    ctx.shadowColor = 'rgba(75, 58, 56, .12)';
+    ctx.shadowBlur = 22;
+    ctx.shadowOffsetY = 8;
+    ctx.fillStyle = '#fffbf7';
+    roundRect(ctx, M, headerY, gridW, HEADER_H, 24);
+    ctx.fill();
+    ctx.restore();
 
-    const sources = session.photos.map((p) => p.path);
-    for (const p of session.prints) {
-      if (sources.length >= 4) break;
-      sources.push(p.path);
-    }
-    const imgs = [];
-    for (const src of sources.slice(0, 4)) {
-      try { imgs.push(await loadImage(mediaUrl(src))); } catch (_) {}
-    }
-
-    for (let i = 0; i < imgs.length; i++) {
-      const cx = margin + (i % 2) * (cellW + gap);
-      const cy = margin + Math.floor(i / 2) * (cellH + gap);
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(cx, cy, cellW, cellH);
-      ctx.clip();
-      drawCover(ctx, imgs[i], cx, cy, cellW, cellH);
-      ctx.restore();
-    }
-
-    // footer
-    const footerH = H - footerY;
-    const grad = ctx.createLinearGradient(0, footerY, 0, H);
-    grad.addColorStop(0, '#0f9b9b');
-    grad.addColorStop(1, '#0b7f86');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, footerY, W, footerH);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
-    ctx.font = '600 26px "Epilogue", sans-serif';
-    ctx.fillText('MEMORY PHOTOBOOTH', W / 2, footerY + 52);
-
-    ctx.font = '600 58px "Fraunces", Georgia, serif';
-    let name = (session.event || '').toUpperCase();
-    while (name && ctx.measureText(name).width > W - 60 && ctx.font.indexOf('58px') > -1) {
-      ctx.font = '600 38px "Fraunces", Georgia, serif';
-    }
-    if (name) ctx.fillText(name, W / 2, footerY + 126);
-
-    // logo Memory Photobooth di footer kolase
+    let textX = M + 28;
     try {
       const logo = await loadImage('/logo.png');
-      const lh = 150;
+      const lh = 92;
       const lw = Math.round((logo.width / logo.height) * lh);
-      ctx.drawImage(logo, margin, footerY + footerH - lh - 26, lw, lh);
+      ctx.drawImage(logo, M + 26, headerY + (HEADER_H - lh) / 2, lw, lh);
+      textX = M + 26 + lw + 24;
     } catch (_) {}
 
+    const eventName = String(session.event || 'Memory Photobooth');
+    const maxTextW = W - M - 28 - textX;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#a9646f';
+    ctx.font = '600 17px "Epilogue", system-ui, sans-serif';
+    ctx.fillText('For Your Precious Memories', textX, headerY + 42);
+
+    const title = fitTitle(ctx, eventName, maxTextW, 2, 40, 26);
+    ctx.fillStyle = '#4b3a38';
+    ctx.font = `600 ${title.size}px "Fraunces", Georgia, serif`;
+    if (title.lines.length === 1) {
+      ctx.fillText(title.lines[0], textX, headerY + 112);
+    } else {
+      const lh = title.size + 8;
+      title.lines.forEach((line, i) => ctx.fillText(line, textX, headerY + 84 + i * lh));
+    }
+
+    // ---------- foto ----------
+    const images = await Promise.all(session.photos.map((p) =>
+      loadImage(mediaUrl(p.path)).catch(() => null)
+    ));
+    let rowY = gridY;
+    for (const row of rows) {
+      const rowH = Math.max(...row.map((cell) => cell.h));
+      for (const cell of row) {
+        drawPhotoFrame(ctx, images[cell.i], cell.x, rowY, cell.w, rowH);
+      }
+      rowY += rowH + GAP;
+    }
+
+    // ---------- footer ----------
+    const grad = ctx.createLinearGradient(0, footerY, 0, footerY + FOOTER_H);
+    grad.addColorStop(0, '#a9646f');
+    grad.addColorStop(1, '#c4848d');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, footerY, W, FOOTER_H);
+    ctx.fillStyle = 'rgba(255, 255, 255, .25)';
+    ctx.fillRect(M, footerY, W - M * 2, 1);
+
+    const qrBox = 236;
+    const qrSize = 192;
+    const qx = W - M - qrBox;
+    const qy = footerY + (FOOTER_H - qrBox) / 2;
+    ctx.save();
+    ctx.shadowColor = 'rgba(75, 58, 56, .20)';
+    ctx.shadowBlur = 18;
+    ctx.shadowOffsetY = 8;
+    ctx.fillStyle = '#ffffff';
+    roundRect(ctx, qx, qy, qrBox, qrBox, 22);
+    ctx.fill();
+    ctx.restore();
+
+    // URL relatif: QR tetap mengarah ke domain (baseUrl), tetapi canvas tidak
+    // tercemar CORS saat halaman dibuka lewat localhost/LAN.
+    const qr = await loadImage('/s/' + encodeURIComponent(session.id) + '/qr.png?size=420&cb=' + Date.now());
+    ctx.drawImage(qr, qx + (qrBox - qrSize) / 2, qy + (qrBox - qrSize) / 2, qrSize, qrSize);
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '600 34px "Fraunces", Georgia, serif';
+    ctx.fillText('For Your Precious Memories', M, footerY + 76);
+
+    ctx.fillStyle = 'rgba(255, 255, 255, .92)';
+    ctx.font = '500 21px "Epilogue", system-ui, sans-serif';
+    ctx.fillText(session.title || fmtDate(session.ts), M, footerY + 118);
+
+    ctx.fillStyle = 'rgba(255, 255, 255, .86)';
+    ctx.font = '400 19px "Epilogue", system-ui, sans-serif';
+    ctx.fillText('Scan QR untuk melihat & mengunduh foto.', M, footerY + 166);
+
+    let host = location.host;
     try {
-      const qr = await loadImage(session.qr + '?size=420&cb=' + Date.now());
-      const qs = 190;
-      const qx = (W - qs) / 2;
-      const qy = footerY + footerH - qs - 26;
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(qx - 10, qy - 10, qs + 20, qs + 20);
-      ctx.drawImage(qr, qx, qy, qs, qs);
+      if (session.qr) host = new URL(session.qr).host || host;
     } catch (_) {}
+    ctx.fillStyle = 'rgba(255, 255, 255, .65)';
+    ctx.font = '600 15px "Epilogue", system-ui, sans-serif';
+    ctx.fillText(String(host).toUpperCase(), M, footerY + 214);
 
-    const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255, 255, 255, .88)';
+    ctx.font = '600 13px "Epilogue", system-ui, sans-serif';
+    ctx.fillText('SCAN UNTUK FOTO', qx + qrBox / 2, footerY + FOOTER_H - 17);
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) throw new Error('Canvas tidak dapat disimpan');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = session.id + '_kolase.png';
+    a.download = (session.id || 'sesi') + '_kolase.png';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     toast('Kolase terunduh');
@@ -530,7 +699,7 @@ async function makeCollage() {
     toast('Gagal membuat kolase: ' + err.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Unduh kolase (4 foto + QR)';
+    btn.textContent = label;
   }
 }
 
