@@ -4,7 +4,8 @@ Panduan ini membawa Anda **dari nol** sampai:
 
 - foto dari booth **otomatis terunggah** ke server online;
 - tamu **scan QR** → membuka `https://domain-anda.com/s/<id>` → melihat dan mengunduh foto/template/ZIP **dari jaringan mana pun** (tidak perlu satu WiFi dengan booth);
-- server online menampilkan **dashboard operator** dan **galeri publik**.
+- server online menampilkan **dashboard operator**, **galeri publik per sesi**, dan **galeri per event** (`/e/<event>`);
+- QR sesi/event **sudah bisa discan sebelum upload selesai** — halaman menampilkan loading lalu terisi otomatis.
 
 Booth tetap bisa dipakai lokal sebagai cadangan saat internet mati. Unggahan yang
 tertunda otomatis diulang begitu internet kembali.
@@ -145,7 +146,7 @@ Installer memasang:
 
 - **Node.js 22**;
 - user sistem `sessionhub` + `npm install` produksi;
-- folder `data/media`;
+- folder `data/media` + salinan `config.example.json` ke `data/config.json` (jika belum ada);
 - **UFW**: hanya port 22, 80, 443 yang dibuka (port 3800 tidak diekspos);
 - **Caddy**: HTTPS otomatis + redirect `www` → domain utama;
 - service **systemd** `sessionhub` (auto-start saat boot, auto-restart bila mati).
@@ -227,6 +228,10 @@ Yang wajib benar:
 | `auth.adminPassword` | Password login operator pertama kali. |
 | `cloud.enabled` | **`false`** di server — hanya booth yang mengunggah. |
 
+> **Penting:** `photosPerSession` di server harus sama dengan booth. Jika booth
+> memakai 2 foto, ubah server ke 2 juga; kalau tidak, sesi akan dianggap belum
+> lengkap di server.
+
 ### 5.3 Permission
 
 ```bash
@@ -271,17 +276,18 @@ curl -I http://127.0.0.1:3800/login          # harus 200
 curl -I https://domain-anda.com/login        # harus 200 (HTTPS Caddy)
 ```
 
-Cek endpoint unggah (tanpa token harus ditolak — artinya server hidup):
+Cek endpoint unggah & reserve (tanpa token harus ditolak — artinya server hidup):
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" -X POST https://domain-anda.com/api/push
+curl -s -o /dev/null -w "%{http_code}\n" -X POST https://domain-anda.com/api/push/reserve
 ```
 
 | Hasil | Arti |
 |---|---|
 | `401` | Normal — endpoint aktif, token tidak dikirim/salah. |
 | `403` | `pushToken` di `config.json` masih kosong. |
-| `404`/`502` | Aplikasi/Caddy belum jalan — cek `systemctl status`. |
+| `404`/`502` | Aplikasi/Caddy belum jalan, atau server masih versi lama (endpoint reserve/event belum ada) — deploy update. |
 
 Cek firewall dan HTTPS:
 
@@ -317,6 +323,9 @@ Di PC booth, edit `C:\dslrBooth\SessionHub\config.json`. Cukup tambahkan/ubah:
 }
 ```
 
+> Pastikan `photosPerSession` di booth sama dengan server. Booth mengirim
+> metadata reserve otomatis; tidak ada setting tambahan untuk QR cepat.
+
 Lalu:
 
 1. Tutup jendela `start.cmd` yang lama, jalankan **`start.cmd`** lagi.
@@ -334,7 +343,7 @@ Catatan:
 |---|---|
 | `cloud.token` | **Harus sama persis** dengan `pushToken` di server. |
 | `uploadSince` | Kosong = hanya sesi **24 jam terakhir**. Isi `"2025-01-01"` untuk mengirim sesi lama. |
-| `uploadIncomplete` | `false` = hanya sesi lengkap (4 foto + template) yang dikirim. |
+| `uploadIncomplete` | `false` = hanya sesi lengkap (sesuai `photosPerSession` + template) yang dikirim. |
 | `retrySec` | Jeda percobaan ulang saat internet/server bermasalah. |
 
 Booth **tetap** melayani galeri lokal (cadangan saat internet mati) — jangan
@@ -345,11 +354,19 @@ matikan server lokalnya.
 ## 8. Uji QR + download dari HP
 
 1. Buat satu sesi baru di DSLRBooth.
-2. Di dashboard booth, kartu sesi akan bertanda **☁ online** setelah terunggah.
-3. Buka **`https://domain-anda.com`** di komputer lain (atau HP dengan **data
+2. Di dashboard booth, klik **QR** pada kartu sesi. QR sudah bisa discan
+   **sebelum** upload selesai.
+3. Scan dari HP → halaman menampilkan **Menyiapkan sesi…** dengan spinner.
+   Biarkan terbuka; foto/template muncul otomatis setelah upload selesai.
+4. Di dashboard booth, klik **QR Event** pada judul event → halaman event
+   menampilkan semua sesi, termasuk kartu "Sedang diunggah". Setelah upload
+   selesai, kartu berubah menjadi foto.
+5. Buka **`https://domain-anda.com`** di komputer lain (atau HP dengan **data
    seluler**, bukan WiFi booth) → login → event dan sesi baru muncul.
-4. Buka halaman sesi / scan QR → 4 foto + template tampil.
-5. Tekan **Unduh ZIP** → file terunduh dari server online.
+6. Buka halaman sesi → foto + template tampil → tekan **Unduh ZIP**.
+7. **Uji hapus (admin):** buka salah satu sesi uji → tombol **Hapus** hanya
+   muncul saat login → hapus satu foto, lalu hapus sesi. Setelah dihapus,
+   halaman/API sesi harus mengembalikan 404.
 
 Uji ketahanan internet (opsional):
 
@@ -364,8 +381,13 @@ Uji ketahanan internet (opsional):
   **mengarah ke server online** dan bisa discan dari mana saja.
 - QR lama yang sudah tercetak saat `baseUrl` masih kosong tetap berisi IP LAN —
   cetak ulang QR dari halaman sesi.
-- Halaman tamu `/s/<id>`, QR, dan unduhan bersifat **publik** (tanpa login) agar
-  QR yang dicetak tetap berfungsi.
+- **QR event** membuka `/e/<event>` berisi semua sesi event; halaman ini
+  menyegarkan diri otomatis dan tetap menampilkan sesi yang sedang diunggah.
+- **QR sesi sudah aktif sebelum upload selesai** karena booth mengirim metadata
+  reserve lebih dulu. Halaman tamu menampilkan loading lalu terisi otomatis.
+- Halaman tamu `/s/<id>`, `/e/<event>`, QR, dan unduhan bersifat **publik**
+  (tanpa login) agar QR yang dicetak tetap berfungsi. Hapus sesi/foto tetap
+  **khusus admin** (wajib login).
 
 ---
 
@@ -426,6 +448,11 @@ sudo systemctl start sessionhub
 | Login selalu gagal | Password berbeda dari `auth.adminPassword` (users.json sudah pernah dibuat). Jalankan `setpass` lalu restart. |
 | Upload booth `HTTP 403` | `pushToken` server masih kosong. |
 | Upload booth `HTTP 401` | `cloud.token` booth ≠ `pushToken` server (harus sama persis). |
+| `POST /api/push/reserve` → `404` | Server VPS masih versi lama. `cd /opt/sessionhub && git pull && npm install --omit=dev && systemctl restart sessionhub`. |
+| QR Event / `/e/...` → `404` | Sama: server belum di-update. |
+| Halaman sesi berhenti di "Menyiapkan sesi" | Upload belum selesai atau koneksi booth buruk. Cek `journalctl -u sessionhub -f` untuk log `[reserve]`/`[cloud]`; halaman mencoba otomatis. |
+| Hapus sesi/foto → `401` | Hapus khusus admin; login ulang sebagai operator. |
+| Sesi online tampil "belum lengkap" | `photosPerSession` server ≠ booth. Samakan nilainya, lalu restart server. |
 | Upload `ECONNREFUSED` / `ENOTFOUND` | `cloud.url` salah, DNS belum siap, atau server mati. |
 | Server online kosong padahal booth ☁ | Cek `journalctl -u sessionhub -f` saat unggahan masuk; pastikan `rootDir` benar. |
 | Tamu tidak bisa buka link | Pastikan link memakai domain (bukan IP LAN), server hidup, dan port 80/443 terbuka di firewall VPS. |
@@ -441,11 +468,16 @@ sudo systemctl start sessionhub
 - [ ] `https://domain-anda.com` terbuka dengan HTTPS valid
 - [ ] Login operator `admin` berhasil
 - [ ] `POST /api/push` tanpa token → `401`
+- [ ] `POST /api/push/reserve` tanpa token → `401`
 - [ ] Booth menampilkan `[cloud] upload otomatis aktif -> ...`
 - [ ] Sesi baru bertanda ☁ online di dashboard booth
+- [ ] QR sesi bisa discan **sebelum** upload selesai (halaman loading)
+- [ ] QR Event menampilkan semua sesi event, termasuk yang sedang diunggah
 - [ ] Sesi muncul di dashboard online
 - [ ] QR discan dari HP dengan data seluler → foto tampil
 - [ ] Unduh ZIP dari server online berhasil
+- [ ] Hapus sesi/foto hanya berhasil setelah login operator
+- [ ] `photosPerSession` server = booth
 - [ ] Backup `data/` sudah dicoba
 
 ---
@@ -453,6 +485,8 @@ sudo systemctl start sessionhub
 ## Keamanan
 
 - `data/config.json` berisi token & password — permission `600`, jangan dibagikan.
+- `config.json` booth (token upload) **tidak di-commit**; template ada di `config.example.json`.
+- Endpoint hapus sesi/foto memerlukan login operator; jangan bagikan cookie login.
 - Gunakan password operator yang kuat (dashboard terbuka di internet).
 - Jangan pernah commit token/password ke git (folder `data/` sudah di-ignore).
 - Port aplikasi (3800) tidak perlu dibuka ke internet; cukup Caddy di 80/443.

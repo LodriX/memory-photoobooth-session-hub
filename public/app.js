@@ -9,7 +9,10 @@ const state = {
   event: localStorage.getItem('mp_event') || '',
   q: '',
   events: [],
-  cloudEnabled: false
+  cloudEnabled: false,
+  cloudUploadIncomplete: false,
+  photosPerSession: 4,
+  baseUrl: ''
 };
 
 const $ = (id) => document.getElementById(id);
@@ -63,6 +66,8 @@ async function loadStats(retry = 3) {
     const st = await r.json();
     $('stat-total').textContent = st.total;
     $('stat-ready').textContent = st.ready;
+    const readyLabel = $('stat-ready-label');
+    if (readyLabel && st.photosPerSession) readyLabel.textContent = `Siap (${st.photosPerSession} foto + template)`;
     $('stat-incomplete').textContent = st.incomplete;
     $('stat-extra').textContent = state.event ? st.uploaded : st.events;
     $('stat-extra-label').textContent = state.event ? 'Terunggah' : 'Event';
@@ -90,6 +95,9 @@ async function loadStatus() {
     $('foot-scan').textContent = 'Scan terakhir: ' + (st.lastScanAt ? fmtDate(st.lastScanAt) : '—');
     $('scan-hint').textContent = st.scanning ? 'scanning...' : '';
     state.cloudEnabled = !!(st.cloud && st.cloud.enabled);
+    state.cloudUploadIncomplete = !!(st.cloud && st.cloud.uploadIncomplete);
+    state.photosPerSession = st.photosPerSession || state.photosPerSession || 4;
+    state.baseUrl = st.lanUrl || '';
     $('lan-chip').textContent = st.lanUrl;
     $('lan-chip').onclick = () => copyText(st.lanUrl);
     const badge = $('live-badge');
@@ -167,7 +175,7 @@ function uploadTag(s) {
   if (s.cloud && s.cloud.uploadState === 'retry') {
     return '<span class="tag warn">unggah ulang</span>';
   }
-  if (state.cloudEnabled) {
+  if (state.cloudEnabled && (!s.incomplete || state.cloudUploadIncomplete)) {
     return '<span class="tag warn">antre unggah</span><span class="bar tiny indeterminate"><i></i></span>';
   }
   return '';
@@ -181,7 +189,7 @@ function cardHtml(s) {
     ? `<img class="thumb" loading="lazy" src="${mediaUrl(preview)}" onclick="openSession('${esc(s.id)}')" alt="" />`
     : `<div class="thumb"></div>`;
   const tags = [];
-  tags.push(`<span class="tag ${s.photoCount >= 4 ? 'ok' : 'warn'}">${s.photoCount} foto</span>`);
+  tags.push(`<span class="tag ${s.incomplete ? 'warn' : 'ok'}">${s.photoCount} foto</span>`);
   tags.push(`<span class="tag ${s.prints.length ? 'ok' : 'warn'}">${s.prints.length} template</span>`);
   tags.push(uploadTag(s));
   if (s.incomplete) tags.push('<span class="tag warn">belum lengkap</span>');
@@ -196,9 +204,14 @@ function cardHtml(s) {
           <a class="btn" href="/s/${encodeURIComponent(s.id)}">Buka</a>
           <button class="btn ghost" onclick="showQr('${esc(s.id)}')">QR</button>
           <a class="btn ghost" href="/api/sessions/${encodeURIComponent(s.id)}/zip" title="Unduh semua foto + template">ZIP</a>
+          <button class="btn ghost danger" onclick="deleteSession('${esc(s.id)}')" title="Hapus sesi (khusus admin)">Hapus</button>
         </div>
       </div>
     </div>`;
+}
+
+function eventQrBtn(name) {
+  return `<button class="btn small ghost qr-event" data-event="${esc(name)}" onclick="showEventQr(this.dataset.event)" title="QR untuk semua sesi event ini">QR Event</button>`;
 }
 
 function render() {
@@ -223,12 +236,12 @@ function render() {
     });
     root.innerHTML = ordered.map(([name, list]) => `
       <section class="event-sec">
-        <h3 class="event-title">${esc(name)} <span class="count">${list.length} sesi ditampilkan</span></h3>
+        <h3 class="event-title">${esc(name)} <span class="count">${list.length} sesi ditampilkan</span> ${eventQrBtn(name)}</h3>
         <div class="grid">${list.map(cardHtml).join('')}</div>
       </section>`).join('');
   } else {
     root.innerHTML = `<section class="event-sec">
-      <h3 class="event-title">${esc(state.event)} <span class="count">${state.total} sesi</span></h3>
+      <h3 class="event-title">${esc(state.event)} <span class="count">${state.total} sesi</span> ${eventQrBtn(state.event)}</h3>
       <div class="grid">${items.map(cardHtml).join('')}</div>
     </section>`;
   }
@@ -242,7 +255,7 @@ function showModal(s) {
   $('modal-title').textContent = s.title || s.id;
   $('modal-qr').src = s.qr + '?size=480&cb=' + Date.now();
   $('modal-link').textContent = s.url;
-  $('modal-open').href = '/s/' + encodeURIComponent(s.id);
+  $('modal-open').href = s.openUrl || ('/s/' + encodeURIComponent(s.id));
   $('modal-download').href = s.qr + '?size=1024';
   $('qr-modal').classList.remove('hidden');
 }
@@ -253,7 +266,34 @@ async function showQr(id) {
     if (!r.ok) throw new Error('not found');
     showModal(await r.json());
   } catch (_) {
-    showModal({ id, title: id, url: location.origin + '/s/' + id, qr: '/s/' + id + '/qr.png' });
+    const base = (state.baseUrl || location.origin).replace(/\/+$/, '');
+    showModal({ id, title: id, url: base + '/s/' + encodeURIComponent(id), qr: base + '/s/' + encodeURIComponent(id) + '/qr.png' });
+  }
+}
+
+function showEventQr(name) {
+  const ev = state.events.find((e) => e.name === name);
+  const base = (state.baseUrl || location.origin).replace(/\/+$/, '');
+  const fallback = base + '/e/' + encodeURIComponent(name);
+  showModal({
+    title: 'QR Event — ' + name,
+    url: (ev && ev.url) || fallback,
+    qr: (ev && ev.qr) || (fallback + '/qr.png'),
+    openUrl: (ev && ev.url) || fallback
+  });
+}
+
+async function deleteSession(id) {
+  if (!confirm('Hapus sesi ini beserta foto & template-nya?\n\nFile akan dihapus permanen dari penyimpanan server ini dan tidak bisa dikembalikan.')) return;
+  try {
+    const r = await fetch('/api/sessions/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (r.status === 401) { location.replace('/login'); return; }
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    toast('Sesi dihapus');
+    await Promise.all([loadStats(), loadEvents(), loadSessions()]);
+  } catch (err) {
+    toast('Gagal menghapus: ' + err.message);
   }
 }
 function closeModal() { $('qr-modal').classList.add('hidden'); }

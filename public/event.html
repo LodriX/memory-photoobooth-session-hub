@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Galeri Event — Memory Photobooth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Epilogue:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="icon" type="image/png" href="/logo.png" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand-logo" src="/logo.png" alt="Memory Photobooth" />
+      <div>
+        <h1>Memory Photobooth</h1>
+        <p id="event-name" class="tagline">Memuat event...</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span id="live-badge" class="badge live on">LIVE</span>
+      <button id="btn-refresh" class="btn ghost">Refresh</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="event-head">
+      <div>
+        <h2 id="event-title">Galeri Event</h2>
+        <p id="event-sub" class="hint">Memuat sesi...</p>
+      </div>
+    </section>
+
+    <div id="event-loading" class="empty">Memuat sesi event...</div>
+    <div id="event-empty" class="empty hidden">Belum ada sesi di event ini. Halaman ini menyegarkan diri otomatis.</div>
+    <section id="event-grid" class="grid"></section>
+  </main>
+
+  <footer class="footer">
+    <span>Memory Photobooth — For Your Precious Memories</span>
+    <span id="foot-update"></span>
+  </footer>
+
+  <script src="/event.js"></script>
+</body>
+</html>

@@ -35,7 +35,9 @@ sudo -u "$APP_USER" npm install --omit=dev --no-audit --no-fund || npm install -
 
 # Konfigurasi server disimpan di data/config.json (di luar repo, tidak ikut git).
 if [ ! -f "$APP_DIR/data/config.json" ]; then
-  cp "$APP_DIR/config.json" "$APP_DIR/data/config.json"
+  CONFIG_SRC="$APP_DIR/config.json"
+  [ -f "$CONFIG_SRC" ] || CONFIG_SRC="$APP_DIR/config.example.json"
+  cp "$CONFIG_SRC" "$APP_DIR/data/config.json"
   chown "$APP_USER:$APP_USER" "$APP_DIR/data/config.json"
   chmod 600 "$APP_DIR/data/config.json"
 fi

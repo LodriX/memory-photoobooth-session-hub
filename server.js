@@ -15,6 +15,7 @@ const { CloudSync } = require('./lib/cloud-sync');
 const { qrBuffer } = require('./lib/qr');
 const { lanAddress, isLocalHost } = require('./lib/net');
 const { Auth } = require('./lib/auth');
+const { PendingStore } = require('./lib/pending');
 
 const cfg = loadConfig();
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -24,6 +25,8 @@ const BLOCKED_RE = /[\\/](Settings|Templates|SessionHub)([\\/]|$)/i;
 const DATA_DIR = process.env.SESSIONHUB_DATA || path.join(__dirname, 'data');
 const store = new Store(path.join(DATA_DIR, 'sessions.json'));
 store.load();
+const pending = new PendingStore(path.join(DATA_DIR, 'pending.json'));
+pending.load();
 
 const scanner = new Scanner(cfg, store);
 const cloudSync = new CloudSync(cfg, store);
@@ -66,6 +69,72 @@ function publicSession(req, s) {
     url: sessionUrl(req, s.id),
     qr: sessionUrl(req, s.id) + '/qr.png'
   };
+}
+
+function eventUrl(req, name) {
+  return baseUrlFor(req) + '/e/' + encodeURIComponent(name);
+}
+
+/** Data sesi yang sudah dipesan tetapi file-nya belum selesai diunggah. */
+function publicPending(req, p) {
+  const url = sessionUrl(req, p.id);
+  return {
+    pending: true,
+    id: p.id,
+    event: p.event,
+    title: p.title || p.id,
+    ts: p.ts || p.createdAt,
+    photoCount: Number(p.photoCount) || 0,
+    printCount: Number(p.printCount) || 0,
+    incomplete: !!p.incomplete,
+    expectedFiles: Number(p.expectedFiles) || 0,
+    createdAt: p.createdAt || null,
+    url,
+    qr: url + '/qr.png'
+  };
+}
+
+// ---------- util file (untuk hapus sesi oleh admin) ----------
+
+function rootPathOf(rel) {
+  const abs = path.resolve(cfg.rootDir, String(rel || ''));
+  const rootWithSep = cfg.rootDir.endsWith(path.sep) ? cfg.rootDir : cfg.rootDir + path.sep;
+  return abs.startsWith(rootWithSep) ? abs : null;
+}
+
+function removeRelFile(rel) {
+  const abs = rootPathOf(rel);
+  if (!abs) return false;
+  try {
+    fs.unlinkSync(abs);
+    return true;
+  } catch (err) {
+    if (err.code === 'ENOENT') return false;
+    throw err;
+  }
+}
+
+/** Semua file (foto, thumb, template, QR print) milik satu sesi. */
+function sessionFilePaths(s) {
+  const out = new Set();
+  const add = (p) => {
+    if (!p) return;
+    if (p.path) out.add(p.path);
+    if (p.thumb) out.add(p.thumb);
+  };
+  (s.photos || []).forEach(add);
+  (s.prints || []).forEach(add);
+  if (s.qrPrint) out.add(s.qrPrint);
+  return [...out];
+}
+
+/** File yang boleh dihapus lewat endpoint hapus-satu-file. */
+function sessionFileTargets(s, rel) {
+  for (const p of [...(s.photos || []), ...(s.prints || [])]) {
+    if (p.path === rel) return [p.path, p.thumb].filter(Boolean);
+  }
+  if (s.qrPrint && s.qrPrint === rel) return [s.qrPrint];
+  return null;
 }
 
 // ---------- Login ----------
@@ -150,6 +219,7 @@ app.get('/api/status', requireAuth, (req, res) => {
     lastScanAt: scanner.state.lastScanAt || store.data.lastScan,
     events: scanner.state.events,
     counts: { total: all.length, ready, incomplete: all.length - ready },
+    pendingUploads: pending.count(),
     cloud: cloudSync.state,
     errors: scanner.state.errors.slice(-10)
   });
@@ -158,12 +228,19 @@ app.get('/api/status', requireAuth, (req, res) => {
 app.get('/api/events', requireAuth, (req, res) => {
   const byEvent = {};
   for (const s of store.all()) {
-    const e = (byEvent[s.event] = byEvent[s.event] || { name: s.event, total: 0, ready: 0, incomplete: 0 });
+    const e = (byEvent[s.event] = byEvent[s.event] || { name: s.event, total: 0, ready: 0, incomplete: 0, pending: 0 });
     e.total++;
     if (s.incomplete) e.incomplete++;
     else e.ready++;
   }
-  res.json({ events: Object.values(byEvent).sort((a, b) => a.name.localeCompare(b.name)) });
+  for (const p of pending.all()) {
+    const e = byEvent[p.event];
+    if (e) e.pending++;
+  }
+  const events = Object.values(byEvent)
+    .map((e) => ({ ...e, url: eventUrl(req, e.name), qr: eventUrl(req, e.name) + '/qr.png' }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  res.json({ events });
 });
 
 // statistik menyesuaikan event terpilih (?event=NamaEvent)
@@ -216,8 +293,98 @@ app.get('/api/sessions', requireAuth, (req, res) => {
 
 app.get('/api/sessions/:id', (req, res) => {
   const s = store.get(req.params.id);
+  if (s) return res.json(publicSession(req, s));
+  const p = pending.get(req.params.id);
+  if (p) return res.json(publicPending(req, p));
+  res.status(404).json({ error: 'Sesi belum tersedia', pending: false });
+});
+
+// ---------- Hapus sesi / foto (khusus admin yang sudah login) ----------
+
+app.delete('/api/sessions/:id/file', requireAuth, (req, res) => {
+  const s = store.get(req.params.id);
   if (!s) return res.status(404).json({ error: 'Sesi tidak ditemukan' });
-  res.json(publicSession(req, s));
+  const rel = String(req.query.p || '');
+  const targets = sessionFileTargets(s, rel);
+  if (!targets) return res.status(400).json({ error: 'File bukan bagian dari sesi ini' });
+
+  const deleted = [];
+  for (const t of targets) {
+    try {
+      if (removeRelFile(t)) deleted.push(t);
+    } catch (err) {
+      return res.status(500).json({ error: 'Gagal menghapus ' + t + ': ' + err.message });
+    }
+  }
+  scanner.requestRescan(s.event);
+  bus.emit('change', { changed: [s.id], removed: [], event: s.event });
+  console.log('[hapus] file ' + s.id + ': ' + deleted.join(', '));
+  res.json({ ok: true, deleted });
+});
+
+app.delete('/api/sessions/:id', requireAuth, (req, res) => {
+  const s = store.get(req.params.id);
+  const cancelled = pending.remove(req.params.id);
+  if (!s) {
+    if (cancelled) return res.json({ ok: true, pending: true, deletedFiles: 0 });
+    return res.status(404).json({ error: 'Sesi tidak ditemukan' });
+  }
+
+  const deleted = [];
+  for (const rel of sessionFilePaths(s)) {
+    try {
+      if (removeRelFile(rel)) deleted.push(rel);
+    } catch (err) {
+      return res.status(500).json({ error: 'Gagal menghapus ' + rel + ': ' + err.message });
+    }
+  }
+  store.remove(s.id);
+  scanner.requestRescan(s.event);
+  bus.emit('change', { changed: [], removed: [s.id], event: s.event });
+  console.log('[hapus] sesi ' + s.id + ' (' + deleted.length + ' file)');
+  res.json({ ok: true, deletedFiles: deleted.length });
+});
+
+// ---------- Galeri event publik (QR utama per event) ----------
+
+app.get('/api/events/:event', (req, res) => {
+  const name = String(req.params.event || '').trim();
+  if (!name) return res.status(400).json({ error: 'Event kosong' });
+
+  const items = [];
+  const seen = new Set();
+  for (const s of store.all()) {
+    if (s.event !== name) continue;
+    seen.add(s.id);
+    const preview = (s.prints[0] && (s.prints[0].thumb || s.prints[0].path)) ||
+      (s.photos[0] && (s.photos[0].thumb || s.photos[0].path)) || '';
+    const url = sessionUrl(req, s.id);
+    items.push({
+      id: s.id,
+      title: s.title || s.id,
+      ts: s.ts,
+      photoCount: s.photoCount,
+      printCount: (s.prints || []).length,
+      incomplete: !!s.incomplete,
+      pending: false,
+      preview,
+      url,
+      qr: url + '/qr.png'
+    });
+  }
+  for (const p of pending.all()) {
+    if (p.event !== name || seen.has(p.id)) continue;
+    items.push({ ...publicPending(req, p), preview: '' });
+  }
+  items.sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0));
+
+  res.json({
+    event: name,
+    total: items.length,
+    ready: items.filter((i) => !i.pending && !i.incomplete).length,
+    pending: items.filter((i) => i.pending).length,
+    items
+  });
 });
 
 app.post('/api/rescan', requireAuth, async (req, res) => {
@@ -230,6 +397,36 @@ app.post('/api/rescan', requireAuth, async (req, res) => {
 });
 
 // ---------- Push dari booth (upload ke server) ----------
+
+// Booth memesan slot sesi lebih dulu supaya QR langsung bisa discan dan
+// halaman tamu menampilkan status "sedang diunggah" sampai file tiba.
+app.post('/api/push/reserve', express.json({ limit: '256kb' }), (req, res) => {
+  if (!cfg.pushToken) {
+    return res.status(403).json({ error: 'pushToken belum diatur di server (config.json)' });
+  }
+  if (!tokenOk(req)) return res.status(401).json({ error: 'token salah' });
+
+  const meta = req.body || {};
+  const id = String(meta.id || '').trim();
+  const event = safeName(meta.event);
+  if (!/^[A-Za-z0-9._-]{1,120}$/.test(id)) return res.status(400).json({ error: 'id tidak valid' });
+  if (!event) return res.status(400).json({ error: 'event kosong' });
+
+  if (store.get(id)) return res.json({ ok: true, exists: true });
+
+  const ts = String(meta.ts || '');
+  const p = pending.put(id, {
+    event,
+    title: String(meta.title || '').slice(0, 120),
+    ts: Number.isFinite(Date.parse(ts)) ? ts : new Date().toISOString(),
+    photoCount: Math.min(50, Math.max(0, Number(meta.photoCount) || 0)),
+    printCount: Math.min(50, Math.max(0, Number(meta.printCount) || 0)),
+    incomplete: !!meta.incomplete,
+    expectedFiles: Math.min(100, Math.max(0, Number(meta.expectedFiles) || 0))
+  });
+  console.log('[reserve] ' + event + ' / ' + id + ' (' + p.expectedFiles + ' file)');
+  res.json({ ok: true, id, event });
+});
 
 const ALLOWED_PUSH_SUBS = new Set(['Singles', 'Prints', 'Prints/Qr']);
 const pushUpload = multer({
@@ -336,11 +533,11 @@ app.get('/api/sessions/:id/zip', async (req, res) => {
 // ---------- QR ----------
 
 app.get('/s/:id/qr.png', async (req, res) => {
-  const s = store.get(req.params.id);
-  if (!s) return res.status(404).send('Not found');
+  const id = String(req.params.id || '');
+  if (!id || id.length > 200) return res.status(400).send('Id tidak valid');
   const size = Math.min(1500, Math.max(128, parseInt(req.query.size, 10) || 512));
   try {
-    const buf = await qrBuffer(sessionUrl(req, s.id), size);
+    const buf = await qrBuffer(sessionUrl(req, id), size);
     res.set('Content-Type', 'image/png');
     res.set('Cache-Control', 'public, max-age=300');
     res.send(buf);
@@ -387,6 +584,25 @@ app.get('/s/:id', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'session.html'));
 });
 
+// QR utama event -> halaman semua sesi event tersebut
+app.get('/e/:event/qr.png', async (req, res) => {
+  const name = String(req.params.event || '').trim();
+  if (!name || name.length > 200) return res.status(400).send('Event tidak valid');
+  const size = Math.min(1500, Math.max(128, parseInt(req.query.size, 10) || 512));
+  try {
+    const buf = await qrBuffer(eventUrl(req, name), size);
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'public, max-age=300');
+    res.send(buf);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/e/:event', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'event.html'));
+});
+
 // ---------- SSE ----------
 
 app.get('/api/stream', requireAuth, (req, res) => {
@@ -422,13 +638,22 @@ app.use(express.static(PUBLIC_DIR));
 
 // ---------- Start ----------
 
+function cleanupPending() {
+  const n = pending.cleanup(24 * 3600 * 1000, (id) => !!store.get(id));
+  if (n) console.log('[pending] ' + n + ' entri selesai/kedaluwarsa dibersihkan');
+}
+
 scanner.on('changed', (payload) => {
+  cleanupPending();
   bus.emit('change', payload);
   cloudSync.notify(payload.changed);
 });
 cloudSync.on('updated', (id) => bus.emit('change', { changed: [id], removed: [], event: '* cloud' }));
 scanner.on('state', () => bus.emit('state', {}));
-scanner.on('scanned', () => bus.emit('state', {}));
+scanner.on('scanned', () => {
+  cleanupPending();
+  bus.emit('state', {});
+});
 scanner.on('error', (err) => console.error('[scan]', err.message));
 
 (async () => {
@@ -445,6 +670,10 @@ scanner.on('error', (err) => console.error('[scan]', err.message));
   }
   console.log(' Event terdeteksi:', scanner.state.events.join(', ') || '(belum ada)');
   console.log(' Total sesi     :', store.count());
+  cleanupPending();
+  console.log(' Menunggu upload:', pending.count());
+  // penting: timer ini yang menjalankan backfill saat start + retry saat jaringan buruk
+  cloudSync.start();
   if (auth.generatedPassword) {
     console.log('');
     console.log('  AKUN PERTAMA DIBUAT:  admin / ' + auth.generatedPassword);
@@ -467,6 +696,8 @@ scanner.on('error', (err) => console.error('[scan]', err.message));
 async function shutdown() {
   console.log('\nMenyimpan data & berhenti...');
   try { await scanner.stop(); } catch (_) {}
+  try { cloudSync.stop(); } catch (_) {}
+  try { await pending.flush(); } catch (_) {}
   try { await store.flush(); } catch (_) {}
   process.exit(0);
 }

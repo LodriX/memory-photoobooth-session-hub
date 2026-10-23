@@ -24,6 +24,13 @@
     </div>
   </header>
 
+  <div id="admin-bar" class="admin-bar hidden">
+    <span class="admin-badge">MODE ADMIN</span>
+    <span class="admin-hint">Hapus hanya terlihat saat Anda login sebagai operator.</span>
+    <a class="btn small ghost" href="/">Dashboard</a>
+    <button id="btn-delete-session" class="btn small danger">Hapus sesi ini</button>
+  </div>
+
   <main>
     <div id="banner" class="banner hidden"></div>
 
@@ -31,6 +38,15 @@
       <section class="panel">
         <h2 id="title">&mdash;</h2>
         <div class="sub" id="subtitle">&mdash;</div>
+
+        <div id="pending-panel" class="pending-panel hidden">
+          <div class="spinner"></div>
+          <h3 id="pending-title">Menyiapkan sesi&hellip;</h3>
+          <p id="pending-text" class="pending-text">Foto sedang diunggah ke server online. Halaman ini akan menampilkan foto secara otomatis.</p>
+          <p id="pending-meta" class="pending-meta"></p>
+          <p id="pending-error" class="pending-error hidden"></p>
+          <button id="pending-retry" class="btn small ghost hidden">Coba lagi</button>
+        </div>
 
         <div id="upload-status" class="upload-status hidden">
           <div class="u-label"><span>Status unggah ke server online</span><b id="upload-state">ANTRE</b></div>
@@ -56,15 +72,17 @@
           <a class="btn ghost" id="btn-qr-dl" download>Unduh QR</a>
         </div>
 
-        <div class="row" style="margin-top:10px">
+        <div class="row" id="zip-row" style="margin-top:10px">
           <button class="btn magenta" id="btn-zip" style="flex:1">Unduh semua (ZIP)</button>
         </div>
         <div id="zip-progress" class="bar hidden" style="margin-top:8px"><i style="width:0%"></i></div>
         <div class="bar-text hidden" id="zip-info"></div>
 
-        <div class="row" style="margin-top:8px">
+        <div class="row" id="collage-row" style="margin-top:8px">
           <button class="btn ghost" id="btn-collage" style="flex:1">Unduh kolase (4 foto + QR)</button>
         </div>
+
+        <a class="btn ghost" id="btn-event" href="#" style="margin-top:10px;width:100%" hidden>Semua sesi event</a>
 
         <ul class="files" id="files"></ul>
       </aside>

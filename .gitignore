@@ -1,6 +1,5 @@
 node_modules/
-data/sessions.json
-data/users.json
-data/heartbeat.txt
-data/*.log
-data/config.json
+# konfigurasi lokal berisi token/password - jangan pernah di-commit
+config.json
+# seluruh data runtime (sesi, user, heartbeat, log, media server)
+data/

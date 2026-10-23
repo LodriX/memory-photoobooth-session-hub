@@ -2,11 +2,20 @@
 
 const $ = (id) => document.getElementById(id);
 const mediaUrl = (p) => '/file?p=' + encodeURIComponent(p);
-const id = decodeURIComponent(location.pathname.split('/').pop());
+let id = location.pathname.split('/').pop() || '';
+try {
+  id = decodeURIComponent(id);
+} catch (_) {}
 
 let session = null;
+let pendingMeta = null;
 let cloudEnabled = false;
+let cloudUploadIncomplete = false;
 let zipBusy = false;
+let isAdmin = false;
+let pollTimer = null;
+let unknownTries = 0;
+let statusFetchedAt = 0;
 
 function fmtDate(iso) {
   try {
@@ -35,7 +44,7 @@ function toast(msg) {
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(t._timer);
-  t._timer = setTimeout(() => t.classList.remove('show'), 1800);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
 async function copyText(text) {
@@ -63,24 +72,132 @@ function fmtBytes(n) {
   return n + ' B';
 }
 
+function setQr(url) {
+  const qrUrl = String(url).replace(/\/+$/, '') + '/qr.png';
+  $('qr').src = qrUrl + '?size=512&cb=' + Date.now();
+  $('url').textContent = url;
+  $('btn-qr-dl').href = qrUrl + '?size=1024';
+  $('btn-copy').onclick = () => copyText(url);
+}
+
+function setEventLink(eventName) {
+  const link = $('btn-event');
+  if (eventName) {
+    link.href = '/e/' + encodeURIComponent(eventName);
+    link.classList.remove('hidden');
+  } else {
+    link.classList.add('hidden');
+    link.removeAttribute('href');
+  }
+}
+
+/** Tampilan loading: QR sudah bisa dipakai, foto menyusul otomatis. */
+function showPending(meta) {
+  if (meta) pendingMeta = meta;
+  const info = meta || pendingMeta;
+  const eventName = (info && info.event) || '';
+  const gaveUp = !info && unknownTries >= 40;
+
+  $('pending-panel').classList.remove('hidden');
+  $('banner').classList.add('hidden');
+  $('upload-status').classList.add('hidden');
+  $('feature').classList.add('hidden');
+  $('photos').innerHTML = '';
+  $('zip-row').classList.add('hidden');
+  $('zip-progress').classList.add('hidden');
+  $('zip-info').classList.add('hidden');
+  $('collage-row').classList.add('hidden');
+  $('files').innerHTML = '';
+
+  $('event-name').textContent = eventName || 'Memory Photobooth';
+  $('title').textContent = gaveUp ? 'Sesi belum tersedia' : 'Menyiapkan sesi…';
+  $('subtitle').textContent = info
+    ? `${info.event} • ${info.photoCount || 0} foto + ${info.printCount || 0} template • menunggu unggahan`
+    : 'Menunggu data sesi dari server...';
+
+  $('pending-title').textContent = gaveUp ? 'Sesi belum tersedia' : 'Menyiapkan sesi…';
+  $('pending-text').textContent = gaveUp
+    ? 'Server belum menerima sesi ini. Pastikan QR yang discan benar, lalu coba lagi.'
+    : 'Foto sedang diunggah ke server online. Halaman ini akan menampilkan foto secara otomatis — tidak perlu scan ulang.';
+  $('pending-meta').textContent = info
+    ? `${info.expectedFiles ? info.expectedFiles + ' file' : 'Foto'} akan tampil di sini otomatis.`
+    : '';
+
+  $('pending-error').classList.add('hidden');
+  $('pending-retry').classList.toggle('hidden', !gaveUp);
+
+  setQr((info && info.url) || (location.origin + '/s/' + encodeURIComponent(id)));
+  setEventLink(eventName);
+}
+
+function hidePending() {
+  $('pending-panel').classList.add('hidden');
+  $('zip-row').classList.remove('hidden');
+  $('collage-row').classList.remove('hidden');
+  $('pending-meta').textContent = '';
+  $('pending-error').classList.add('hidden');
+  $('pending-retry').classList.add('hidden');
+}
+
+async function loadMe() {
+  try {
+    const r = await fetch('/api/me');
+    isAdmin = r.ok;
+  } catch (_) {
+    isAdmin = false;
+  }
+  $('admin-bar').classList.toggle('hidden', !isAdmin);
+}
+
 async function load() {
-  const [sr, r] = await Promise.all([
-    fetch('/api/status').catch(() => null),
-    fetch('/api/sessions/' + encodeURIComponent(id))
-  ]);
-  if (sr && sr.ok) {
-    const st = await sr.json();
-    cloudEnabled = !!(st.cloud && st.cloud.enabled);
+  clearTimeout(pollTimer);
+  try {
+    const wantStatus = Date.now() - statusFetchedAt > 30000;
+    const [sr, r] = await Promise.all([
+      wantStatus ? fetch('/api/status').catch(() => null) : Promise.resolve(null),
+      fetch('/api/sessions/' + encodeURIComponent(id))
+    ]);
+    if (sr) {
+      statusFetchedAt = Date.now();
+      if (sr.ok) {
+        try {
+          const st = await sr.json();
+          cloudEnabled = !!(st.cloud && st.cloud.enabled);
+          cloudUploadIncomplete = !!(st.cloud && st.cloud.uploadIncomplete);
+        } catch (_) {}
+      }
+    }
+
+    if (r.status === 404) {
+      unknownTries++;
+      pendingMeta = null;
+      showPending(null);
+      if (unknownTries < 40) pollTimer = setTimeout(load, unknownTries <= 10 ? 3000 : 10000);
+      return;
+    }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+
+    const data = await r.json();
+    if (data.pending) {
+      pendingMeta = data;
+      unknownTries = 0;
+      showPending(data);
+      pollTimer = setTimeout(load, 2500);
+      return;
+    }
+
+    session = data;
+    pendingMeta = null;
+    unknownTries = 0;
+    hidePending();
+    render();
+    if (session.incomplete) pollTimer = setTimeout(load, 5000);
+  } catch (err) {
+    showPending(pendingMeta);
+    $('pending-error').textContent = 'Menunggu koneksi ke server... (' + ((err && err.message) || err) + ')';
+    $('pending-error').classList.remove('hidden');
+    pollTimer = setTimeout(load, 5000);
   }
-  if (!r.ok) {
-    document.body.innerHTML = '<main><div class="empty">Sesi tidak ditemukan. <a href="/">Kembali ke dashboard</a></div></main>';
-    return;
-  }
-  session = await r.json();
-  render();
-  // auto-refresh: sampai sesi lengkap, atau selagi masih diunggah
-  const pending = cloudEnabled && !(session.cloud && session.cloud.uploadedAt);
-  if (session.incomplete || pending) setTimeout(load, 5000);
 }
 
 function render() {
@@ -101,7 +218,7 @@ function render() {
     banner.textContent = `Sesi lengkap: ${s.photoCount} foto + ${s.printCount} template. QR aktif.`;
   }
 
-  // status unggah ke server online
+  // status unggah ke server online (hanya tampil di booth)
   const box = $('upload-status');
   if (!cloudEnabled) {
     box.classList.add('hidden');
@@ -110,6 +227,12 @@ function render() {
     box.classList.add('done');
     $('upload-state').textContent = 'TERKIRIM';
     $('upload-info').textContent = 'Sesi ini sudah tersedia di website online.';
+    box.querySelector('.bar').classList.add('hidden');
+  } else if (s.incomplete && !cloudUploadIncomplete) {
+    box.classList.remove('hidden');
+    box.classList.add('done');
+    $('upload-state').textContent = 'MENUNGGU LENGKAP';
+    $('upload-info').textContent = 'Sesi akan diunggah otomatis setelah foto & template lengkap.';
     box.querySelector('.bar').classList.add('hidden');
   } else {
     box.classList.remove('hidden', 'done');
@@ -150,13 +273,10 @@ function render() {
     wrap.appendChild(img);
   }
 
-  // QR
-  $('qr').src = s.qr + '?size=512';
-  $('url').textContent = s.url;
-  $('btn-qr-dl').href = s.qr + '?size=1024';
-  $('btn-copy').onclick = () => copyText(s.url);
+  setQr(s.url);
+  setEventLink(s.event);
 
-  // daftar file
+  // daftar file (tombol hapus hanya untuk admin yang login)
   const files = [];
   s.photos.forEach((p, i) => files.push({ label: 'Foto ' + (i + 1), path: p.path }));
   s.prints.forEach((p, i) => files.push({
@@ -164,22 +284,68 @@ function render() {
     path: p.path
   }));
   if (s.qrPrint) files.push({ label: 'Template QR (DSLRBooth)', path: s.qrPrint });
+
   $('files').innerHTML = files.map((f) => `
     <li>
       <span class="f-label">
         <span class="f-name">${esc(f.label)}</span>
       </span>
-      <a class="btn small ghost" href="/file?p=${encodeURIComponent(f.path)}&download=1">Unduh</a>
+      <span class="f-actions">
+        <a class="btn small ghost" href="/file?p=${encodeURIComponent(f.path)}&download=1">Unduh</a>
+        ${isAdmin ? `<button class="btn small ghost danger f-del" data-path="${esc(f.path)}">Hapus</button>` : ''}
+      </span>
     </li>`).join('');
+  $('files').onclick = (e) => {
+    const btn = e.target.closest('.f-del');
+    if (btn) deleteFile(btn.dataset.path);
+  };
 
   $('btn-collage').onclick = makeCollage;
   $('btn-zip').onclick = downloadZip;
 }
 
+// ---------- hapus (khusus admin) ----------
+
+async function deleteFile(rel) {
+  if (!isAdmin) return;
+  if (!confirm('Hapus file ini dari sesi?\n\nFile akan dihapus permanen dari penyimpanan server ini.')) return;
+  try {
+    const r = await fetch('/api/sessions/' + encodeURIComponent(id) + '/file?p=' + encodeURIComponent(rel), {
+      method: 'DELETE'
+    });
+    if (r.status === 401) { location.replace('/login'); return; }
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    toast('File dihapus');
+    setTimeout(load, 1200);
+  } catch (err) {
+    toast('Gagal menghapus file: ' + err.message);
+  }
+}
+
+async function deleteSession() {
+  if (!isAdmin) return;
+  const info = session || pendingMeta;
+  const eventName = (info && info.event) || '';
+  if (!confirm('Hapus SELURUH sesi ini (foto + template)?\n\nFile akan dihapus permanen dari penyimpanan server ini dan tidak bisa dikembalikan.')) return;
+  try {
+    const r = await fetch('/api/sessions/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (r.status === 401) { location.replace('/login'); return; }
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    toast('Sesi dihapus');
+    setTimeout(() => {
+      location.href = eventName ? '/e/' + encodeURIComponent(eventName) : '/';
+    }, 700);
+  } catch (err) {
+    toast('Gagal menghapus sesi: ' + err.message);
+  }
+}
+
 // ---------- ZIP: unduh semua file sesi dengan progress ----------
 
 function downloadZip() {
-  if (zipBusy) return;
+  if (zipBusy || !session) return;
   zipBusy = true;
   const btn = $('btn-zip');
   const bar = $('zip-progress');
@@ -272,6 +438,7 @@ function drawCover(ctx, img, x, y, w, h) {
 }
 
 async function makeCollage() {
+  if (!session) return;
   const btn = $('btn-collage');
   btn.disabled = true;
   btn.textContent = 'Membuat kolase...';
@@ -367,4 +534,14 @@ async function makeCollage() {
   }
 }
 
-load();
+$('pending-retry').addEventListener('click', () => {
+  unknownTries = 0;
+  $('pending-retry').classList.add('hidden');
+  load();
+});
+$('btn-delete-session').addEventListener('click', deleteSession);
+
+(async function init() {
+  await loadMe();
+  load();
+})();
