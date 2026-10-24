@@ -22,7 +22,8 @@
     "uploadIncomplete": false,
     "uploadSince": "",
     "retrySec": 60,
-    "tickSec": 10
+    "tickSec": 10,
+    "concurrency": 3
   },
 
   "scanDebounceMs": 800,

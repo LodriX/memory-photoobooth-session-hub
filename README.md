@@ -48,6 +48,7 @@ Satu aplikasi, dua peran:
 - **Statistik per event**: total sesi, siap/lengkap, belum lengkap, terunggah.
 - **Unggah otomatis ke VPS** dengan antrean + retry — internet putus tidak masalah, unggahan dilanjutkan saat kembali.
 - **Anti-duplikat**: status upload disimpan lintas rescan; sebelum backfill, booth mencocokkan daftar sesi dengan `/api/events/<event>` sehingga sesi yang sudah ada di server tidak dikirim ulang.
+- **Upload efisien**: koneksi HTTPS dipakai ulang, reserve berjalan bersamaan dengan upload, dan beberapa sesi dapat diunggah paralel (`cloud.concurrency`, default 3).
 - **Tema soft romantic**, responsif di HP, iPad mini, dan desktop.
 - **Watchdog**: `start.cmd` menghidupkan ulang server otomatis, plus heartbeat dan `data/error.log` untuk diagnosa.
 
@@ -179,11 +180,17 @@ dibaca lewat env `SESSIONHUB_CONFIG`). File `config.json` bersifat **lokal**
 | `cloud.uploadSince` | `""` | Kosong = sesi **24 jam terakhir**. Isi tanggal ISO untuk backfill sesi lama. |
 | `cloud.retrySec` | `60` | Jeda awal antar percobaan ulang. |
 | `cloud.tickSec` | `10` | Interval pemrosesan antrean unggah. |
+| `cloud.concurrency` | `3` | Jumlah sesi yang diunggah bersamaan (1–4). Turunkan bila koneksi tidak stabil. |
 | `scanDebounceMs` | `800` | Debounce scan saat ada file baru. |
 | `rootRescanSec` | `60` | Rescan penuh berkala. |
 
 > Samakan `photosPerSession` di booth dan server. Kalau booth memakai 2 foto,
 > server juga harus 2; kalau tidak, sesi akan tampil "belum lengkap" di server.
+
+> Kecepatan total upload tetap dibatasi bandwidth uplink. Tanpa kompresi atau
+> upgrade jaringan, optimasi yang dipakai adalah koneksi HTTPS keep-alive,
+> reserve yang berjalan bersamaan dengan upload, dan `cloud.concurrency`
+> (default 3). Bila koneksi tidak stabil, turunkan ke 2 atau 1.
 
 ## Unggah otomatis ke VPS + domain
 
