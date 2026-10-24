@@ -50,6 +50,7 @@ Satu aplikasi, dua peran:
 - **Unggah otomatis ke VPS** dengan antrean + retry — internet putus tidak masalah, unggahan dilanjutkan saat kembali.
 - **Anti-duplikat**: status upload disimpan lintas rescan; sebelum backfill, booth mencocokkan daftar sesi dengan `/api/events/<event>` sehingga sesi yang sudah ada di server tidak dikirim ulang.
 - **Upload efisien**: koneksi HTTPS dipakai ulang, reserve berjalan bersamaan dengan upload, dan beberapa sesi dapat diunggah paralel (`cloud.concurrency`, default 3).
+- **Prune reserve yatim**: booth mengirim daftar ID valid; server menghapus kartu *pending* lama yang tidak punya pasangan lokal (mis. print dibuat ulang) setelah umurnya 10 menit.
 - **Tema soft romantic**, responsif di HP, iPad mini, dan desktop.
 - **Watchdog**: `start.cmd` menghidupkan ulang server otomatis, plus heartbeat dan `data/error.log` untuk diagnosa.
 
@@ -69,6 +70,8 @@ Satu aplikasi, dua peran:
 
 Saat sesi selesai, booth mengirim **metadata reserve** lebih dulu, lalu file menyusul.
 Dengan begitu `/s/<id>` dan `/e/<event>` sudah bisa dibuka dan terisi otomatis.
+Booth juga mengirim daftar ID valid secara berkala agar server dapat membuang
+reserve yatim yang tidak akan pernah terisi.
 
 Kode yang sama dipakai di kedua sisi. Perannya ditentukan oleh `config.json`:
 
@@ -182,6 +185,7 @@ dibaca lewat env `SESSIONHUB_CONFIG`). File `config.json` bersifat **lokal**
 | `cloud.retrySec` | `60` | Jeda awal antar percobaan ulang. |
 | `cloud.tickSec` | `10` | Interval pemrosesan antrean unggah. |
 | `cloud.concurrency` | `3` | Jumlah sesi yang diunggah bersamaan (1–4). Turunkan bila koneksi tidak stabil. |
+| `cloud.pruneSec` | `600` | Interval kirim daftar ID valid untuk membersihkan reserve yatim (detik). |
 | `scanDebounceMs` | `800` | Debounce scan saat ada file baru. |
 | `rootRescanSec` | `60` | Rescan penuh berkala. |
 
@@ -206,7 +210,9 @@ dibaca lewat env `SESSIONHUB_CONFIG`). File `config.json` bersifat **lokal**
      "uploadIncomplete": false,
      "uploadSince": "",
      "retrySec": 60,
-     "tickSec": 10
+     "tickSec": 10,
+     "concurrency": 3,
+     "pruneSec": 600
    }
    ```
 
@@ -215,10 +221,13 @@ dibaca lewat env `SESSIONHUB_CONFIG`). File `config.json` bersifat **lokal**
    (di luar repo, permission `600`). Nilai `photosPerSession` harus sama dengan booth.
 3. Ikuti panduan lengkap dari nol di **[DEPLOY.md](DEPLOY.md)** (VPS, DNS,
    Node, Caddy/HTTPS, firewall, systemd auto-restart).
+4. Pastikan VPS memakai versi yang memiliki `POST /api/push/prune`. Tanpa
+   endpoint itu, booth tetap bisa upload tetapi reserve lama tidak dibersihkan.
 
 Setelah aktif: sesi lengkap diunggah otomatis; bila internet putus, sesi tetap
 tersimpan lokal dan diunggah ulang saat koneksi kembali. QR yang dibuat booth
-langsung mengarah ke domain publik.
+langsung mengarah ke domain publik. Reserve yang tidak pernah mendapat file
+dibersihkan otomatis setelah 10 menit (maksimal setiap `pruneSec`).
 
 ## Ganti jaringan / pindah WiFi
 
@@ -265,6 +274,7 @@ Yang **tidak** otomatis:
 | `DELETE /api/sessions/<id>/file?p=...` | operator | Hapus satu file/foto sesi. |
 | `/api/push/reserve` | server (Bearer token) | Booth memesan sesi agar QR langsung aktif. |
 | `/api/push` | server (Bearer token) | Menerima unggahan sesi dari booth. |
+| `/api/push/prune` | server (Bearer token) | Menghapus reserve yatim yang tidak ada di daftar ID booth. |
 
 ## Restart & perawatan
 
@@ -318,16 +328,16 @@ Untuk serah terima ke operator atau agent berikutnya, baca **[agent.md](agent.md
 Dokumen tersebut memuat snapshot status booth/VPS, arsitektur reserve + upload,
 konfigurasi penting, checklist verifikasi, troubleshooting, dan aturan kerja.
 
-Ringkasan snapshot **24 Oktober 2026** (commit `0986900`):
+Ringkasan snapshot **25 Oktober 2026**:
 
 - Booth lokal: antrean upload **0**, seluruh sesi event terakhir sudah ditandai
   terupload, dan `cloud.concurrency` aktif di angka **3**.
-- Server publik: sesi ready sudah cocok dengan booth; tidak ada ID duplikat.
-  Masih ada 24 entri pending lama tanpa file lokal yang akan kedaluwarsa
-  otomatis dalam 24 jam.
-- Perubahan upload terbaru hanya berjalan di booth. **VPS tidak wajib
-  di-update** untuk perbaikan tersebut; update VPS bersifat opsional untuk
-  menyamakan versi.
+- Server publik: 131 sesi ready; 2 sesi lokal masih 404 di server dan belum
+  dikirim ulang. Tidak ada ID duplikat. Masih ada 24 entri pending lama tanpa
+  file lokal; fitur **prune** akan menghapusnya otomatis setelah VPS dan booth
+  memakai versi terbaru.
+- Perbaikan upload sebelumnya hanya berjalan di booth. **Fitur prune butuh
+  update di VPS dan restart booth**; update VPS juga menyamakan versi.
 - Sebelum restart booth, pastikan `cloud.pending` sudah 0 agar upload tidak
   terputus di tengah jalan.
 
@@ -341,6 +351,7 @@ Ringkasan snapshot **24 Oktober 2026** (commit `0986900`):
 | Statistik menampilkan `?` | Garis merah muda di bawah kotak statistik menampilkan pesan error; klik untuk mencoba lagi. |
 | Sesi tidak muncul | Cek `rootDir`, jalankan `npm run validate`, lalu **Rescan** di dashboard. |
 | Halaman sesi terus **Menyiapkan sesi** | Upload belum selesai atau reserve belum diterima server. Cek koneksi, `cloud.token`, dan log `[reserve]`/`[cloud]`. Halaman mencoba otomatis; tombol **Coba lagi** muncul setelah ±2 menit. |
+| Kartu pending lama tetap muncul | Reserve yatim dari sesi yang ID-nya berubah. Setelah VPS memakai versi prune, booth akan menghapusnya otomatis saat pengecekan berikutnya. Tanpa prune, entri hilang setelah 24 jam. |
 | QR Event / `/e/...` 404 | Server VPS masih versi lama. Deploy update lalu `systemctl restart sessionhub`. |
 | Tombol **Hapus** tidak muncul | Anda belum login sebagai operator. Hapus memang khusus admin; endpoint mengembalikan 401 tanpa login. |
 | Sesi online dianggap belum lengkap | `photosPerSession` di server berbeda dengan booth. Samakan nilainya lalu rescan/restart server. |

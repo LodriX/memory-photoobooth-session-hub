@@ -5,7 +5,8 @@
 > Dokumen ini adalah titik masuk untuk agent atau operator berikutnya.
 > Baca `README.md` untuk fitur dan `DEPLOY.md` untuk pemasangan VPS.
 >
-> **Snapshot terakhir:** 24 Oktober 2026, commit `0986900` (branch `Main`).
+> **Snapshot terakhir:** 25 Oktober 2026, branch `Main`.
+> Commit terbaru: cek `git log -1 --oneline`.
 > Status di bawah adalah kondisi saat serah terima; **selalu verifikasi ulang**
 > sebelum mengubah produksi.
 
@@ -31,7 +32,9 @@ Alur utama:
 4. File sesi diunggah lewat `POST /api/push`.
 5. Server menyimpan file, scanner server mengindeks, galeri berubah dari
    *pending* menjadi *ready*.
-6. Tamu membuka `/s/<id>` atau `/e/<event>`; admin dapat menghapus sesi/foto
+6. Booth mengirim daftar ID valid secara berkala; server menghapus reserve
+   yatim yang tidak akan pernah mendapat file.
+7. Tamu membuka `/s/<id>` atau `/e/<event>`; admin dapat menghapus sesi/foto
    setelah login.
 
 ---
@@ -41,11 +44,11 @@ Alur utama:
 ### Lokal (booth)
 
 - Server berjalan di port **3800**, dijalankan lewat `start.cmd`.
-- `cloud.enabled: true`, `concurrency: 3`.
+- `cloud.enabled: true`, `concurrency: 3`, `pruneSec: 600`.
 - Antrean upload: **0**, `lastError: null`.
-- Sesi event terakhir: **133/133 sudah ditandai terupload**.
+- Sesi event terakhir: **133/133 sudah ditandai terupload** di lokal.
 - Tidak ada error di `data/error.log`.
-- Seluruh perubahan terbaru sudah aktif setelah restart pukul 22:35 lokal.
+- Kode upload + prune terbaru aktif setelah booth di-restart.
 
 ### Server online
 
@@ -54,10 +57,13 @@ Alur utama:
   - `POST /api/push/reserve` tanpa token → **401** (bukan 404).
   - `/e/<event>` → **200**.
   - QR event → **200**.
-- Event terakhir: **133 sesi ready** di server, cocok dengan 133 sesi lokal.
+- Event terakhir: **131 sesi ready** di server; lokal menandai 133.
+  Dua sesi lokal masih 404 di server dan **belum dikirim ulang**:
+  `20261023_224129_176` dan `20261024_164650_269`.
 - Tidak ada ID duplikat.
 - Masih ada **24 kartu pending lama** di server yang tidak punya file lokal.
-  Ini **bukan duplikat**; akan kedaluwarsa otomatis dalam 24 jam.
+  Ini **bukan duplikat**; fitur **prune** akan menghapusnya setelah VPS dan
+  booth memakai versi terbaru. Tanpa prune, entri hilang setelah 24 jam.
 
 > `cloud.uploaded` di `/api/status` adalah penghitung sejak server lokal restart.
 > Jumlah sebenarnya ada di `data/sessions.json` pada `cloud.uploadedAt` per sesi.
@@ -68,14 +74,19 @@ Alur utama:
 |---|---|
 | `11eea3d` | Anti-duplikat: pertahankan status upload saat rescan + rekonsiliasi dengan server |
 | `0986900` | Upload paralel, keep-alive, reserve tidak memblokir upload, skip sesi tanpa file |
+| commit prune | Endpoint `/api/push/prune` + pembersihan reserve yatim dari booth (lihat `git log`) |
 
 Keduanya sudah di-push ke `Main`:
 
 `https://github.com/LodriX/memory-photoobooth-session-hub`
 
-**VPS tidak wajib di-update untuk dua commit tersebut** karena keduanya hanya
-mengubah perilaku booth. Update VPS hanya diperlukan jika ada perubahan
-`server.js`, route API, atau file `public/` yang ingin dipakai publik.
+Dua commit upload (`11eea3d`, `0986900`) hanya mengubah perilaku booth, jadi
+VPS tidak wajib di-update untuk keduanya.
+
+**Fitur prune berbeda:** perubahan menyentuh `server.js` dan `lib/pending.js`,
+jadi **VPS wajib di-update dan di-restart**, lalu booth juga di-restart.
+Tanpa update VPS, booth akan mendapat HTTP 404 saat memanggil prune dan kartu
+pending lama tetap tampil sampai kedaluwarsa 24 jam.
 
 ---
 
@@ -111,6 +122,26 @@ Ada dua lapis perlindungan:
    - Hanya sesi yang belum ada yang masuk antrean.
 
 Jangan mengubah salah satu lapis ini tanpa menguji skenario rescan dan restart.
+
+### Prune reserve yatim
+
+- Setiap `cloud.pruneSec` (default 600 detik), booth mengirim daftar seluruh
+  ID sesi lokal per event ke `POST /api/push/prune`.
+- Server hanya menghapus entri pending untuk event itu yang:
+  - ID-nya tidak ada di daftar `keep`, dan
+  - umurnya sudah minimal **10 menit**.
+- Entri yang masih muda tidak disentuh agar upload yang sedang berjalan aman.
+- Prune berjalan di latar belakang dan tidak menahan antrean upload.
+- Penyebab umum reserve yatim: print dibuat ulang/nama file berubah setelah
+  reserve dikirim, sehingga ID sesi lokal berubah dan reserve lama tidak pernah
+  mendapat file.
+- Endpoint memakai token push yang sama. Payload `keep` kosong ditolak server.
+- Prune mengasumsikan **satu booth per event/token**. Jangan memakai token yang
+  sama untuk beberapa booth yang mengunggah ke event yang sama, karena daftar
+  `keep` dari satu booth dapat menghapus pending booth lain.
+
+Fitur ini membutuhkan versi server dan booth yang sama-sama baru. Jangan
+mengaktifkan prune di booth sebelum endpoint tersedia di VPS.
 
 ### Optimasi kecepatan
 
@@ -156,7 +187,8 @@ Nilai penting di config lokal:
     "uploadIncomplete": false,
     "retrySec": 60,
     "tickSec": 10,
-    "concurrency": 3
+    "concurrency": 3,
+    "pruneSec": 600
   }
 }
 ```
@@ -192,8 +224,8 @@ yang sama; reset lewat perintah di server bila perlu.
 | `server.js` | Express: dashboard, API publik/operator, push, QR, ZIP, hapus |
 | `lib/scanner.js` | Memantau `Singles/` dan `Prints/`, membentuk sesi |
 | `lib/store.js` | Menyimpan sesi; **mempertahankan metadata cloud** |
-| `lib/cloud-sync.js` | Reserve, upload, retry, rekonsiliasi anti-duplikat |
-| `lib/pending.js` | Entri pending sebelum file tiba; expiry 24 jam |
+| `lib/cloud-sync.js` | Reserve, upload, retry, rekonsiliasi anti-duplikat, prune |
+| `lib/pending.js` | Entri pending sebelum file tiba; expiry 24 jam + prune yatim |
 | `lib/auth.js` | Hash password scrypt + sesi login |
 | `lib/qr.js` | Pembuatan QR sesi/event |
 | `public/session.js` | Halaman tamu, loading, polling, hapus admin, kolase |
@@ -240,8 +272,8 @@ setelah login. Jangan menaruh password admin di skrip yang di-commit.
 
 ## 7. Update dan deploy VPS
 
-Update hanya jika memang ada perubahan server. Untuk commit `11eea3d` dan
-`0986900`, langkah ini **opsional**.
+Update VPS **wajib** untuk fitur prune karena ada route baru di `server.js`.
+Untuk commit upload lama (`11eea3d`, `0986900`), update sebenarnya opsional.
 
 ```bash
 cd /opt/sessionhub
@@ -252,11 +284,19 @@ sudo systemctl status sessionhub --no-pager
 sudo journalctl -u sessionhub -n 50 --no-pager
 ```
 
-Tidak ada dependency baru pada dua commit terakhir, jadi `npm install` tidak
-diperlukan. Jika `package.json` berubah, jalankan instalasi sesuai `DEPLOY.md`.
+Tidak ada dependency baru, jadi `npm install` tidak diperlukan. Jika
+`package.json` berubah, jalankan instalasi sesuai `DEPLOY.md`.
 
-Jangan mengubah `data/config.json` hanya untuk menambah `cloud.concurrency`;
-itu pengaturan booth, bukan server.
+Urutan aman:
+
+1. Backup `data/` VPS.
+2. Pull + restart VPS.
+3. Verifikasi endpoint prune mengembalikan 401 tanpa token (bukan 404).
+4. Restart booth agar kode prune lokal aktif.
+5. Tunggu log `[cloud] ... reserve yatim dibersihkan`.
+
+Jangan mengubah `data/config.json` hanya untuk menambah `cloud.concurrency`
+atau `cloud.pruneSec`; keduanya pengaturan booth, bukan server.
 
 ---
 
@@ -269,10 +309,23 @@ itu pengaturan booth, bukan server.
 curl -s -o /dev/null -w '%{http_code}\n' \
   -X POST https://foto.memorystudio.id/api/push/reserve
 
+# Fitur prune harus ada: 401/403, bukan 404
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -X POST https://foto.memorystudio.id/api/push/prune
+
 # Halaman event harus 200 (URL-encode nama event)
 curl -s -o /dev/null -w '%{http_code}\n' \
   'https://foto.memorystudio.id/e/Nama%20Event'
 ```
+
+Setelah booth restart, cek log lokal:
+
+```text
+[cloud] N reserve yatim dibersihkan (Nama Event)
+```
+
+Jika muncul `prune reserve gagal ... HTTP 404`, VPS belum memakai versi prune.
+Jika `HTTP 401`, token booth dan `pushToken` VPS tidak cocok.
 
 ### Cek data event
 
@@ -316,7 +369,9 @@ Periksa:
 | Sesi online dianggap belum lengkap | `photosPerSession` VPS berbeda dengan booth. Samakan, lalu rescan/restart. |
 | QR mengarah ke alamat lama | Isi `baseUrl` dengan domain permanen; buka ulang halaman agar QR dibuat ulang. |
 | Halaman tamu terus loading | File belum tiba atau reserve gagal. Cek status cloud dan log server. |
-| Kartu pending lama di event | Sisa reserve tanpa file lokal. Bukan duplikat; hilang otomatis setelah 24 jam. |
+| Kartu pending lama di event | Sisa reserve tanpa file lokal. Bukan duplikat. Prune menghapusnya setelah 10 menit bila VPS + booth sudah versi baru; tanpa prune hilang setelah 24 jam. |
+| `[cloud] prune reserve gagal ... HTTP 404` | VPS belum punya endpoint `/api/push/prune`. Pull + restart VPS, lalu restart booth. |
+| `[cloud] prune reserve gagal ... HTTP 401` | `cloud.token` booth tidak sama dengan `pushToken` VPS. |
 | Login admin lupa | Lokal: `npm run setpass -- admin PasswordBaru`, lalu restart. VPS: jalankan perintah yang sama di `/opt/sessionhub`, lalu restart service. |
 | Server lokal tidak merespons | Tunggu watchdog ±15 detik; cek `data/heartbeat.txt` dan `data/error.log`. Hindari restart saat upload aktif. |
 
@@ -324,19 +379,23 @@ Periksa:
 
 ## 10. Hal yang diketahui / risiko
 
-1. **24 pending lama di server** tidak punya file lokal. Biarkan kedaluwarsa
-   atau buat mekanisme pembersihan khusus; jangan menganggapnya sesi valid.
-2. **Kecepatan upload** dibatasi uplink ±1 MB/detik. Jangan menjanjikan
+1. **24 pending lama di server** tidak punya file lokal. Setelah VPS + booth
+   memakai versi prune, entri ini akan dibersihkan otomatis. Jangan
+   menganggapnya sesi valid.
+2. **Dua sesi lokal masih 404 di server** (`20261023_224129_176`,
+   `20261024_164650_269`) dan belum dikirim ulang. File lokal lengkap; kirim
+   ulang hanya setelah pemilik memastikan sesi itu tidak sengaja dihapus.
+3. **Kecepatan upload** dibatasi uplink ±1 MB/detik. Jangan menjanjikan
    percepatan besar tanpa kompresi/upgrade jaringan.
-3. **VPS bisa tertinggal commit** dari booth. Selalu cek `git log` dan
+4. **VPS bisa tertinggal commit** dari booth. Selalu cek `git log` dan
    `git status` sebelum melakukan perubahan server.
-4. **Tidak ada test suite otomatis** yang lengkap. `scripts/validate.js` hanya
+5. **Tidak ada test suite otomatis** yang lengkap. `scripts/validate.js` hanya
    memvalidasi konfigurasi/path. Uji alur reserve → upload → event → hapus
    secara manual setelah perubahan besar.
-5. **Data dan config tidak masuk git**. Backup `data/` dan `config.json`
+6. **Data dan config tidak masuk git**. Backup `data/` dan `config.json`
    sebelum perubahan berisiko.
-6. **Kapasitas disk**: event 133 sesi ≈ 730 MB. Pantau ruang disk VPS dan lokal.
-7. **Password admin VPS berbeda** dari lokal. Jangan mencoba password lokal
+7. **Kapasitas disk**: event 133 sesi ≈ 730 MB. Pantau ruang disk VPS dan lokal.
+8. **Password admin VPS berbeda** dari lokal. Jangan mencoba password lokal
    di server publik.
 
 ---
@@ -344,14 +403,17 @@ Periksa:
 ## 11. Checklist handover
 
 - [ ] `git status` bersih dan `Main` sudah di-push.
-- [ ] `config.json` lokal berisi `rootDir`, `baseUrl`, token, dan `concurrency`
-      yang benar.
+- [ ] `config.json` lokal berisi `rootDir`, `baseUrl`, token, `concurrency`,
+      dan `pruneSec` yang benar.
 - [ ] `data/config.json` VPS berisi `pushToken` dan `photosPerSession` yang
       cocok dengan booth.
 - [ ] Backup `data/` lokal dan VPS.
 - [ ] Status lokal `cloud.pending = 0` dan tidak ada `lastError`.
-- [ ] `/api/push/reserve` tanpa token mengembalikan 401, bukan 404.
+- [ ] `/api/push/reserve` dan `/api/push/prune` tanpa token mengembalikan
+      401/403, bukan 404.
 - [ ] `/e/<event>` dan QR event mengembalikan 200.
+- [ ] Log booth menampilkan reserve yatim dibersihkan; kartu pending lama
+      hilang dari halaman event.
 - [ ] Sesi lokal yang sudah terupload juga ready di server.
 - [ ] Uji satu sesi baru: QR loading → foto muncul → event ready.
 - [ ] Uji tombol hapus: hanya admin yang bisa.
@@ -370,12 +432,14 @@ Periksa:
 5. **Jangan mengubah `photosPerSession`** di satu sisi saja.
 6. **Jangan mengompres atau mengubah resolusi** foto tanpa persetujuan pemilik.
 7. **Pertahankan metadata `cloud`** di `lib/store.js`; ini inti anti-duplikat.
-8. **Uji dengan mock server lokal** untuk perubahan antrean/upload sebelum
-   menyentuh server produksi.
-9. **Commit dengan pesan jelas** dan push ke `Main` setelah verifikasi.
-10. **Perbarui dokumentasi** jika perilaku, konfigurasi, atau alur berubah.
-11. **Jangan mengekspos URL privat atau data tamu** di commit/dokumentasi.
-12. **Gunakan Bahasa Indonesia** untuk teks UI dan dokumentasi yang ada.
+8. **Jangan kirim prune dengan daftar `keep` kosong/tidak lengkap.** Server
+   menolak `keep` kosong, dan entri berumur kurang dari 10 menit tidak dihapus.
+9. **Uji dengan mock server lokal** untuk perubahan antrean/upload/prune
+   sebelum menyentuh server produksi.
+10. **Commit dengan pesan jelas** dan push ke `Main` setelah verifikasi.
+11. **Perbarui dokumentasi** jika perilaku, konfigurasi, atau alur berubah.
+12. **Jangan mengekspos URL privat atau data tamu** di commit/dokumentasi.
+13. **Gunakan Bahasa Indonesia** untuk teks UI dan dokumentasi yang ada.
 
 ---
 

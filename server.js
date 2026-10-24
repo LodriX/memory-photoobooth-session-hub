@@ -428,6 +428,31 @@ app.post('/api/push/reserve', express.json({ limit: '256kb' }), (req, res) => {
   res.json({ ok: true, id, event });
 });
 
+// Booth mengirim daftar ID yang masih valid. Server menghapus reserve lama
+// untuk event itu yang tidak ada di daftar dan umurnya sudah >= minAgeSec.
+// Reserve muda tidak disentuh agar upload yang sedang berjalan tetap aman.
+app.post('/api/push/prune', express.json({ limit: '1mb' }), (req, res) => {
+  if (!cfg.pushToken) {
+    return res.status(403).json({ error: 'pushToken belum diatur di server (config.json)' });
+  }
+  if (!tokenOk(req)) return res.status(401).json({ error: 'token salah' });
+
+  const meta = req.body || {};
+  const event = safeName(meta.event);
+  if (!event) return res.status(400).json({ error: 'event kosong' });
+
+  const keep = (Array.isArray(meta.keep) ? meta.keep : [])
+    .map((id) => String(id || '').trim())
+    .filter((id) => /^[A-Za-z0-9._-]{1,120}$/.test(id))
+    .slice(0, 5000);
+  if (!keep.length) return res.status(400).json({ error: 'keep kosong' });
+
+  const minAgeSec = Math.min(86400, Math.max(60, Number(meta.minAgeSec) || 600));
+  const removed = pending.prune(event, keep, minAgeSec * 1000);
+  if (removed) console.log(`[prune] ${event}: ${removed} reserve yatim dihapus`);
+  res.json({ ok: true, event, removed, remaining: pending.count() });
+});
+
 const ALLOWED_PUSH_SUBS = new Set(['Singles', 'Prints', 'Prints/Qr']);
 const pushUpload = multer({
   storage: multer.memoryStorage(),

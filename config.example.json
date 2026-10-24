@@ -23,7 +23,8 @@
     "uploadSince": "",
     "retrySec": 60,
     "tickSec": 10,
-    "concurrency": 3
+    "concurrency": 3,
+    "pruneSec": 600
   },
 
   "scanDebounceMs": 800,

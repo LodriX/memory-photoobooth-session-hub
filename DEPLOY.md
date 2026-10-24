@@ -276,18 +276,19 @@ curl -I http://127.0.0.1:3800/login          # harus 200
 curl -I https://domain-anda.com/login        # harus 200 (HTTPS Caddy)
 ```
 
-Cek endpoint unggah & reserve (tanpa token harus ditolak — artinya server hidup):
+Cek endpoint unggah, reserve, & prune (tanpa token harus ditolak - artinya server hidup):
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" -X POST https://domain-anda.com/api/push
 curl -s -o /dev/null -w "%{http_code}\n" -X POST https://domain-anda.com/api/push/reserve
+curl -s -o /dev/null -w "%{http_code}\n" -X POST https://domain-anda.com/api/push/prune
 ```
 
 | Hasil | Arti |
 |---|---|
 | `401` | Normal — endpoint aktif, token tidak dikirim/salah. |
 | `403` | `pushToken` di `config.json` masih kosong. |
-| `404`/`502` | Aplikasi/Caddy belum jalan, atau server masih versi lama (endpoint reserve/event belum ada) — deploy update. |
+| `404`/`502` | Aplikasi/Caddy belum jalan, atau server masih versi lama (endpoint reserve/prune/event belum ada) - deploy update. |
 
 Cek firewall dan HTTPS:
 
@@ -449,6 +450,7 @@ sudo systemctl start sessionhub
 | Upload booth `HTTP 403` | `pushToken` server masih kosong. |
 | Upload booth `HTTP 401` | `cloud.token` booth ≠ `pushToken` server (harus sama persis). |
 | `POST /api/push/reserve` → `404` | Server VPS masih versi lama. `cd /opt/sessionhub && git pull && npm install --omit=dev && systemctl restart sessionhub`. |
+| `POST /api/push/prune` → `404` | Server belum memakai versi prune. Pull + restart VPS, lalu restart booth. |
 | QR Event / `/e/...` → `404` | Sama: server belum di-update. |
 | Halaman sesi berhenti di "Menyiapkan sesi" | Upload belum selesai atau koneksi booth buruk. Cek `journalctl -u sessionhub -f` untuk log `[reserve]`/`[cloud]`; halaman mencoba otomatis. |
 | Hapus sesi/foto → `401` | Hapus khusus admin; login ulang sebagai operator. |
@@ -469,6 +471,7 @@ sudo systemctl start sessionhub
 - [ ] Login operator `admin` berhasil
 - [ ] `POST /api/push` tanpa token → `401`
 - [ ] `POST /api/push/reserve` tanpa token → `401`
+- [ ] `POST /api/push/prune` tanpa token → `401`
 - [ ] Booth menampilkan `[cloud] upload otomatis aktif -> ...`
 - [ ] Sesi baru bertanda ☁ online di dashboard booth
 - [ ] QR sesi bisa discan **sebelum** upload selesai (halaman loading)
