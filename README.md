@@ -47,6 +47,7 @@ Satu aplikasi, dua peran:
 - **Dashboard operator**: login, pilih event, statistik per event, kartu sesi *live* (SSE), rescan, status unggah.
 - **Statistik per event**: total sesi, siap/lengkap, belum lengkap, terunggah.
 - **Unggah otomatis ke VPS** dengan antrean + retry — internet putus tidak masalah, unggahan dilanjutkan saat kembali.
+- **Anti-duplikat**: status upload disimpan lintas rescan; sebelum backfill, booth mencocokkan daftar sesi dengan `/api/events/<event>` sehingga sesi yang sudah ada di server tidak dikirim ulang.
 - **Tema soft romantic**, responsif di HP, iPad mini, dan desktop.
 - **Watchdog**: `start.cmd` menghidupkan ulang server otomatis, plus heartbeat dan `data/error.log` untuk diagnosa.
 
@@ -314,6 +315,8 @@ SessionHub/
 | Tombol **Hapus** tidak muncul | Anda belum login sebagai operator. Hapus memang khusus admin; endpoint mengembalikan 401 tanpa login. |
 | Sesi online dianggap belum lengkap | `photosPerSession` di server berbeda dengan booth. Samakan nilainya lalu rescan/restart server. |
 | Unggah ke VPS tidak jalan | Cek `cloud.enabled`, `cloud.url`, `cloud.token`, dan status cloud di `/api/status`. |
+| Log `[cloud] reserve gagal ... fetch failed` | Koneksi booth ke VPS terputus sesaat. Reserve dicoba ulang otomatis, upload tetap dilanjutkan, dan antrean akan retry. Bila sering, cek WiFi/ISP booth dan pastikan VPS tidak restart. |
+| Sesi lama terunggah ulang | Update sudah menyimpan status upload lintas rescan dan mencocokkan sesi dengan server saat start. Pastikan versi terbaru terpasang, lalu restart SessionHub. |
 | Login lupa password | `npm run setpass -- admin PasswordBaru`, lalu restart server. |
 
 ## Keamanan
