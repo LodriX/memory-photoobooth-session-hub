@@ -6,7 +6,7 @@
 > Baca `README.md` untuk fitur dan `DEPLOY.md` untuk pemasangan VPS.
 >
 > **Snapshot terakhir:** 25 Oktober 2026, branch `Main`.
-> Commit terbaru: cek `git log -1 --oneline`.
+> Commit kode terakhir: `8f1a73b` (commit dokumentasi bisa setelahnya).
 > Status di bawah adalah kondisi saat serah terima; **selalu verifikasi ulang**
 > sebelum mengubah produksi.
 
@@ -74,9 +74,9 @@ Alur utama:
 |---|---|
 | `11eea3d` | Anti-duplikat: pertahankan status upload saat rescan + rekonsiliasi dengan server |
 | `0986900` | Upload paralel, keep-alive, reserve tidak memblokir upload, skip sesi tanpa file |
-| commit prune | Endpoint `/api/push/prune` + pembersihan reserve yatim dari booth (lihat `git log`) |
+| `8f1a73b` | Endpoint `/api/push/prune` + pembersihan reserve yatim dari booth |
 
-Keduanya sudah di-push ke `Main`:
+Semua commit di atas sudah di-push ke `Main`:
 
 `https://github.com/LodriX/memory-photoobooth-session-hub`
 
