@@ -30,6 +30,7 @@ Satu aplikasi, dua peran:
 - [URL penting](#url-penting)
 - [Restart & perawatan](#restart--perawatan)
 - [Struktur proyek](#struktur-proyek)
+- [Handover](#handover)
 - [Troubleshooting](#troubleshooting)
 - [Keamanan](#keamanan)
 
@@ -288,6 +289,9 @@ journalctl -u sessionhub -n 50 --no-pager
 ```
 SessionHub/
 ├─ server.js           # Express: dashboard, API, galeri tamu/event, push, QR, ZIP, hapus
+├─ README.md           # dokumentasi fitur dan pemakaian
+├─ DEPLOY.md           # panduan pemasangan VPS dari nol
+├─ agent.md            # handover: status live, arsitektur upload, checklist
 ├─ config.example.json # template konfigurasi (aman di-commit)
 ├─ config.json         # konfigurasi lokal (token/password; tidak masuk git)
 ├─ start.cmd           # supervisor + watchdog Windows
@@ -307,6 +311,25 @@ SessionHub/
 ├─ deploy/             # Caddyfile, systemd service, install-ubuntu.sh
 └─ data/               # sessions, pending, users, log, media (tidak masuk git)
 ```
+
+## Handover
+
+Untuk serah terima ke operator atau agent berikutnya, baca **[agent.md](agent.md)**.
+Dokumen tersebut memuat snapshot status booth/VPS, arsitektur reserve + upload,
+konfigurasi penting, checklist verifikasi, troubleshooting, dan aturan kerja.
+
+Ringkasan snapshot **24 Oktober 2026** (commit `0986900`):
+
+- Booth lokal: antrean upload **0**, seluruh sesi event terakhir sudah ditandai
+  terupload, dan `cloud.concurrency` aktif di angka **3**.
+- Server publik: sesi ready sudah cocok dengan booth; tidak ada ID duplikat.
+  Masih ada 24 entri pending lama tanpa file lokal yang akan kedaluwarsa
+  otomatis dalam 24 jam.
+- Perubahan upload terbaru hanya berjalan di booth. **VPS tidak wajib
+  di-update** untuk perbaikan tersebut; update VPS bersifat opsional untuk
+  menyamakan versi.
+- Sebelum restart booth, pastikan `cloud.pending` sudah 0 agar upload tidak
+  terputus di tengah jalan.
 
 ## Troubleshooting
 
