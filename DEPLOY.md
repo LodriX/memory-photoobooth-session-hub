@@ -232,6 +232,12 @@ Yang wajib benar:
 > memakai 2 foto, ubah server ke 2 juga; kalau tidak, sesi akan dianggap belum
 > lengkap di server.
 
+Pada update yang menambahkan manajemen akun, akun operator yang sudah ada di VPS
+otomatis menjadi **superadmin** (password tetap). Setelah login, buka `/users`
+untuk membuat admin dan memilih event yang boleh dilihat/dibagikan; `/account`
+untuk mengganti password sendiri. Admin event tidak dapat menghapus media atau
+mengelola user. Booth lokal tetap memakai sistem operator sebelumnya.
+
 ### 5.3 Permission
 
 ```bash
@@ -388,7 +394,12 @@ Uji ketahanan internet (opsional):
   reserve lebih dulu. Halaman tamu menampilkan loading lalu terisi otomatis.
 - Halaman tamu `/s/<id>`, `/e/<event>`, QR, dan unduhan bersifat **publik**
   (tanpa login) agar QR yang dicetak tetap berfungsi. Hapus sesi/foto tetap
-  **khusus admin** (wajib login).
+  **khusus superadmin VPS** (wajib login; admin event tidak bisa menghapus).
+- Pada server online, tombol **Kirim via WhatsApp** ada di dashboard dan detail
+  sesi untuk operator yang berwenang. `wa.me` hanya menyiapkan pesan; operator
+  tetap menekan Kirim di WhatsApp. Nomor penerima tidak disimpan.
+- Shortcut iPad/iPhone melalui Safari **Add to Home Screen** memakai ikon kamera
+  dan hati. Hapus dan buat ulang shortcut lama jika masih menampilkan huruf “M”.
 
 ---
 
@@ -453,7 +464,7 @@ sudo systemctl start sessionhub
 | `POST /api/push/prune` → `404` | Server belum memakai versi prune. Pull + restart VPS, lalu restart booth. |
 | QR Event / `/e/...` → `404` | Sama: server belum di-update. |
 | Halaman sesi berhenti di "Menyiapkan sesi" | Upload belum selesai atau koneksi booth buruk. Cek `journalctl -u sessionhub -f` untuk log `[reserve]`/`[cloud]`; halaman mencoba otomatis. |
-| Hapus sesi/foto → `401` | Hapus khusus admin; login ulang sebagai operator. |
+| Hapus sesi/foto → `401`/`403` | Login ulang jika 401; jika 403, akun admin event tidak punya izin hapus. |
 | Sesi online tampil "belum lengkap" | `photosPerSession` server ≠ booth. Samakan nilainya, lalu restart server. |
 | Upload `ECONNREFUSED` / `ENOTFOUND` | `cloud.url` salah, DNS belum siap, atau server mati. |
 | Server online kosong padahal booth ☁ | Cek `journalctl -u sessionhub -f` saat unggahan masuk; pastikan `rootDir` benar. |

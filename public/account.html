@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ganti Password — Memory Photobooth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Epilogue:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="icon" type="image/png" href="/logo.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+</head>
+<body>
+  <header class="topbar"><div class="brand"><img class="brand-logo" src="/logo.png" alt="" /><h1>Ganti Password</h1></div>
+    <a class="btn ghost" href="/">Dashboard</a></header>
+  <main class="login-wrap">
+    <section class="login-card">
+      <h2>Ganti password akun</h2>
+      <p class="lp-sub" id="account-name"></p>
+      <form id="password-form">
+        <label for="current-password">Password saat ini</label>
+        <input class="lp-input" id="current-password" type="password" autocomplete="current-password" required />
+        <label for="new-password">Password baru (minimal 8 karakter)</label>
+        <input class="lp-input" id="new-password" type="password" autocomplete="new-password" minlength="8" required />
+        <label for="confirm-password">Ulangi password baru</label>
+        <input class="lp-input" id="confirm-password" type="password" autocomplete="new-password" minlength="8" required />
+        <p id="password-error" class="form-message" role="alert"></p>
+        <button class="btn lp-btn" type="submit">Simpan password</button>
+      </form>
+    </section>
+  </main>
+  <script src="/account.js"></script>
+</body>
+</html>

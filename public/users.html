@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kelola User — Memory Photobooth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Epilogue:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="icon" type="image/png" href="/logo.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img class="brand-logo" src="/logo.png" alt="" /><h1>Kelola User</h1></div>
+    <div class="topbar-right"><a class="btn ghost" href="/">Dashboard</a><a class="btn ghost" href="/account">Ganti password</a></div>
+  </header>
+  <main class="users-main">
+    <section class="panel">
+      <h2>Daftar user</h2>
+      <div id="users-list"></div>
+    </section>
+    <section class="panel">
+      <h2 id="user-form-title">Tambah user</h2>
+      <form id="user-form" class="user-form">
+        <label for="user-name">Username</label>
+        <input id="user-name" class="lp-input" autocomplete="off" required minlength="3" maxlength="40" />
+        <label for="user-role">Role</label>
+        <select id="user-role" class="lp-input"><option value="admin">Admin event</option><option value="superadmin">Superadmin</option></select>
+        <div id="user-events-wrap">
+          <label>Event yang boleh dikelola</label>
+          <div id="user-events" class="event-checks"></div>
+        </div>
+        <label for="user-password">Password <small id="password-hint">(minimal 8 karakter)</small></label>
+        <input id="user-password" class="lp-input" type="password" autocomplete="new-password" minlength="8" />
+        <p id="user-error" class="form-message" role="alert"></p>
+        <div class="row"><button class="btn" type="submit">Simpan</button><button id="user-cancel" class="btn ghost hidden" type="button">Batal edit</button></div>
+      </form>
+    </section>
+  </main>
+  <script src="/users.js"></script>
+</body>
+</html>

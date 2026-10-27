@@ -13,6 +13,9 @@ let cloudEnabled = false;
 let cloudUploadIncomplete = false;
 let zipBusy = false;
 let isAdmin = false;
+let whatsappEnabled = false;
+let canDelete = false;
+let allowedEvents = [];
 let pollTimer = null;
 let unknownTries = 0;
 let statusFetchedAt = 0;
@@ -125,6 +128,7 @@ function showPending(meta) {
 
   $('pending-error').classList.add('hidden');
   $('pending-retry').classList.toggle('hidden', !gaveUp);
+  updateShareButton();
 
   setQr((info && info.url) || (location.origin + '/s/' + encodeURIComponent(id)));
   setEventLink(eventName);
@@ -143,10 +147,32 @@ async function loadMe() {
   try {
     const r = await fetch('/api/me');
     isAdmin = r.ok;
+    if (r.ok) {
+      const me = await r.json();
+      whatsappEnabled = !!me.whatsappEnabled;
+      canDelete = !!me.canDelete;
+      allowedEvents = me.events || [];
+    }
   } catch (_) {
     isAdmin = false;
   }
   $('admin-bar').classList.toggle('hidden', !isAdmin);
+  $('btn-delete-session').classList.toggle('hidden', !canDelete);
+  $('btn-account').classList.toggle('hidden', !whatsappEnabled);
+  updateShareButton();
+}
+
+function updateShareButton() {
+  const s = session || pendingMeta;
+  $('btn-share-whatsapp').classList.toggle('hidden', !(isAdmin && whatsappEnabled && s &&
+    (canDelete || allowedEvents.includes(s.event))));
+}
+
+function shareSession() {
+  const s = session || pendingMeta;
+  if (isAdmin && whatsappEnabled && s && (canDelete || allowedEvents.includes(s.event))) {
+    SessionWhatsapp.open(s.url, s.title || s.id);
+  }
 }
 
 async function load() {
@@ -169,6 +195,7 @@ async function load() {
     }
 
     if (r.status === 404) {
+      session = null;
       unknownTries++;
       pendingMeta = null;
       showPending(null);
@@ -179,6 +206,7 @@ async function load() {
 
     const data = await r.json();
     if (data.pending) {
+      session = null;
       pendingMeta = data;
       unknownTries = 0;
       showPending(data);
@@ -191,6 +219,7 @@ async function load() {
     unknownTries = 0;
     hidePending();
     render();
+    updateShareButton();
     if (session.incomplete) pollTimer = setTimeout(load, 5000);
   } catch (err) {
     showPending(pendingMeta);
@@ -292,7 +321,7 @@ function render() {
       </span>
       <span class="f-actions">
         <a class="btn small ghost" href="/file?p=${encodeURIComponent(f.path)}&download=1">Unduh</a>
-        ${isAdmin ? `<button class="btn small ghost danger f-del" data-path="${esc(f.path)}">Hapus</button>` : ''}
+        ${canDelete ? `<button class="btn small ghost danger f-del" data-path="${esc(f.path)}">Hapus</button>` : ''}
       </span>
     </li>`).join('');
   $('files').onclick = (e) => {
@@ -309,7 +338,7 @@ function render() {
 // ---------- hapus (khusus admin) ----------
 
 async function deleteFile(rel) {
-  if (!isAdmin) return;
+  if (!canDelete) return;
   if (!confirm('Hapus file ini dari sesi?\n\nFile akan dihapus permanen dari penyimpanan server ini.')) return;
   try {
     const r = await fetch('/api/sessions/' + encodeURIComponent(id) + '/file?p=' + encodeURIComponent(rel), {
@@ -326,7 +355,7 @@ async function deleteFile(rel) {
 }
 
 async function deleteSession() {
-  if (!isAdmin) return;
+  if (!canDelete) return;
   const info = session || pendingMeta;
   const eventName = (info && info.event) || '';
   if (!confirm('Hapus SELURUH sesi ini (foto + template)?\n\nFile akan dihapus permanen dari penyimpanan server ini dan tidak bisa dikembalikan.')) return;
@@ -709,6 +738,7 @@ $('pending-retry').addEventListener('click', () => {
   load();
 });
 $('btn-delete-session').addEventListener('click', deleteSession);
+$('btn-share-whatsapp').addEventListener('click', shareSession);
 
 (async function init() {
   await loadMe();

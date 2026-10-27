@@ -6,6 +6,7 @@
 > Baca `README.md` untuk fitur dan `DEPLOY.md` untuk pemasangan VPS.
 >
 > **Snapshot terakhir:** 25 Oktober 2026, branch `Main`.
+> Snapshot produksi di bawah bersifat historis; status live harus dicek ulang.
 > Commit kode terakhir: `8f1a73b` (commit dokumentasi bisa setelahnya).
 > Status di bawah adalah kondisi saat serah terima; **selalu verifikasi ulang**
 > sebelum mengubah produksi.
@@ -479,6 +480,25 @@ sudo journalctl -u sessionhub -n 50 --no-pager
 - Pemasangan VPS dari nol: [`DEPLOY.md`](DEPLOY.md)
 - Repository: `https://github.com/LodriX/memory-photoobooth-session-hub`
 - Domain publik: `https://foto.memorystudio.id`
+
+## 15. Fitur VPS setelah snapshot
+
+- Akun lama di `data/users.json` dimigrasikan ke role **superadmin** tanpa
+  mengganti hash password. Di VPS superadmin mengelola akun melalui `/users`;
+  admin hanya melihat serta membagikan sesi event yang ditugaskan. Endpoint
+  operator difilter per event; hapus dan rescan khusus superadmin. API galeri
+  tamu tetap publik, termasuk `/api/events/<event>` yang dipakai rekonsiliasi booth.
+- `/account` menyediakan ganti password dengan password lama. Reset password,
+  perubahan role/event, dan penghapusan akun mencabut sesi login user terkait.
+  Sesi login disimpan in-memory, jadi tetap hilang setelah restart.
+- Tombol **Kirim via WhatsApp** memakai `wa.me` dengan link satu sesi; nomor
+  tidak disimpan, pengiriman final dilakukan operator di WhatsApp. Hanya muncul
+  pada operator VPS yang berhak atas event tersebut.
+- `public/apple-touch-icon.png` (180×180) memakai simbol kamera/hati dari logo;
+  setiap halaman HTML menyertakan tag `apple-touch-icon`. Shortcut iPad lama
+  perlu dibuat ulang untuk mengambil ikon baru.
+- Booth lokal mempertahankan login/operator lama. Pengujian role dan API VPS:
+  `npm test` (fixture sementara, tidak memakai data produksi).
 
 Jika status di dokumen ini berbeda dengan kondisi live, **percayai kondisi live**
 dan perbarui dokumen setelah verifikasi.

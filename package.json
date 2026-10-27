@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "validate": "node scripts/validate.js",
+    "test": "node --test tests/*.test.js",
     "setpass": "node scripts/setpass.js"
   },
   "license": "ISC",

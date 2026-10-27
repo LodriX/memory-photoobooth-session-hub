@@ -12,7 +12,9 @@ const state = {
   cloudEnabled: false,
   cloudUploadIncomplete: false,
   photosPerSession: 4,
-  baseUrl: ''
+  baseUrl: '',
+  whatsappEnabled: false,
+  canDelete: true
 };
 
 const $ = (id) => document.getElementById(id);
@@ -98,6 +100,10 @@ async function loadStatus() {
     state.cloudUploadIncomplete = !!(st.cloud && st.cloud.uploadIncomplete);
     state.photosPerSession = st.photosPerSession || state.photosPerSession || 4;
     state.baseUrl = st.lanUrl || '';
+    if (state.whatsappEnabled !== !!st.whatsappEnabled) {
+      state.whatsappEnabled = !!st.whatsappEnabled;
+      render();
+    }
     $('lan-chip').textContent = st.lanUrl;
     $('lan-chip').onclick = () => copyText(st.lanUrl);
     const badge = $('live-badge');
@@ -200,11 +206,12 @@ function cardHtml(s) {
         <div class="title">${esc(s.title || s.id)}</div>
         <div class="event">${esc(s.event)}</div>
         <div class="tags">${tags.join('')}</div>
-        <div class="actions">
+        <div class="actions${state.whatsappEnabled ? ' with-whatsapp' : ''}">
           <a class="btn" href="/s/${encodeURIComponent(s.id)}">Buka</a>
           <button class="btn ghost" onclick="showQr('${esc(s.id)}')">QR</button>
           <a class="btn ghost" href="/api/sessions/${encodeURIComponent(s.id)}/zip" title="Unduh semua foto + template">ZIP</a>
-          <button class="btn ghost danger" onclick="deleteSession('${esc(s.id)}')" title="Hapus sesi (khusus admin)">Hapus</button>
+          ${state.whatsappEnabled ? `<button class="btn ghost share-whatsapp" type="button" data-share-id="${esc(s.id)}">Kirim via WhatsApp</button>` : ''}
+          ${state.canDelete ? `<button class="btn ghost danger" onclick="deleteSession('${esc(s.id)}')" title="Hapus sesi (khusus superadmin)">Hapus</button>` : ''}
         </div>
       </div>
     </div>`;
@@ -314,6 +321,12 @@ function onFilterChanged() {
 $('filter-status').addEventListener('change', onFilterChanged);
 $('search').addEventListener('input', onFilterChanged);
 $('load-more').addEventListener('click', () => loadSessions(true));
+$('grid-root').addEventListener('click', (e) => {
+  const btn = e.target.closest('.share-whatsapp');
+  if (!btn || !state.whatsappEnabled) return;
+  const s = state.items.find((item) => item.id === btn.dataset.shareId);
+  if (s) SessionWhatsapp.open(s.url, s.title || s.id);
+});
 $('btn-rescan').addEventListener('click', async () => {
   toast('Memindai ulang...');
   await fetch('/api/rescan', { method: 'POST' });
@@ -351,6 +364,13 @@ function connectStream() {
   try {
     const me = await fetch('/api/me');
     if (me.status === 401) { location.replace('/login'); return; }
+    if (me.ok) {
+      const user = await me.json();
+      state.canDelete = !!user.canDelete;
+      $('btn-users').classList.toggle('hidden', user.role !== 'superadmin' || !user.whatsappEnabled);
+      $('btn-account').classList.toggle('hidden', !user.whatsappEnabled);
+      $('btn-rescan').classList.toggle('hidden', !state.canDelete);
+    }
   } catch (_) {}
   // semua muat paralel; kegagalan satu tidak menghalangi yang lain
   await Promise.allSettled([loadStats(), loadStatus(), loadEvents(), loadSessions()]);

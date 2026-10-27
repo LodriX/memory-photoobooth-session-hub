@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Epilogue:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
   <link rel="icon" type="image/png" href="/logo.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 </head>
 <body>
   <header class="topbar">
@@ -26,8 +27,10 @@
 
   <div id="admin-bar" class="admin-bar hidden">
     <span class="admin-badge">MODE ADMIN</span>
-    <span class="admin-hint">Hapus hanya terlihat saat Anda login sebagai operator.</span>
+    <span class="admin-hint">Aksi yang tersedia mengikuti izin akun Anda.</span>
     <a class="btn small ghost" href="/">Dashboard</a>
+    <a id="btn-account" class="btn small ghost hidden" href="/account">Ganti password</a>
+    <button id="btn-share-whatsapp" class="btn small ghost hidden" type="button">Kirim via WhatsApp</button>
     <button id="btn-delete-session" class="btn small danger">Hapus sesi ini</button>
   </div>
 
@@ -93,6 +96,7 @@
     <img id="lightbox-img" alt="" />
   </div>
 
+  <script src="/whatsapp.js"></script>
   <script src="/session.js"></script>
 </body>
 </html>

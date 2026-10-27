@@ -18,6 +18,7 @@ const { Auth } = require('./lib/auth');
 const { PendingStore } = require('./lib/pending');
 
 const cfg = loadConfig();
+const serverMode = !!cfg.pushToken && !cfg.cloud.enabled;
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const ALLOWED_MEDIA_RE = /\.(jpe?g|png|webp|gif|mp4|mov|m4v)$/i;
 const BLOCKED_RE = /[\\/](Settings|Templates|SessionHub)([\\/]|$)/i;
@@ -30,12 +31,14 @@ pending.load();
 
 const scanner = new Scanner(cfg, store);
 const cloudSync = new CloudSync(cfg, store);
-const auth = new Auth(DATA_DIR, (cfg.auth && cfg.auth.adminPassword) || '');
+const auth = new Auth(DATA_DIR, (cfg.auth && cfg.auth.adminPassword) || '', serverMode);
 const bus = new EventEmitter();
 bus.setMaxListeners(0);
 
 const app = express();
 app.disable('x-powered-by');
+// Hanya VPS penerima push yang menawarkan tombol berbagi ke WhatsApp.
+const whatsappEnabled = serverMode;
 
 // cegah browser memakai aset lama (html/js/css) setelah aplikasi diperbarui
 app.use((req, res, next) => {
@@ -158,15 +161,36 @@ function tokenOf(req) {
 }
 
 function requireAuth(req, res, next) {
-  if (auth.getSession(tokenOf(req))) return next();
+  const session = auth.getSession(tokenOf(req));
+  if (session) { req.operator = session; return next(); }
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Belum login' });
   return res.redirect(302, '/login');
+}
+
+function isSuper(req) {
+  return !serverMode || req.operator.role === 'superadmin';
+}
+
+function canManageEvent(req, event) {
+  return isSuper(req) || req.operator.events.includes(event);
+}
+
+function requireSuper(req, res, next) {
+  if (isSuper(req)) return next();
+  res.status(403).json({ error: 'Hanya superadmin yang dapat melakukan tindakan ini' });
+}
+
+function validatedEvents(value) {
+  const known = new Set([...scanner.state.events, ...store.all().map((s) => s.event)]);
+  if (!Array.isArray(value) || value.length > 100 || value.some((e) => typeof e !== 'string' || !known.has(e))) return null;
+  return [...new Set(value)];
 }
 
 app.get('/api/me', (req, res) => {
   const s = auth.getSession(tokenOf(req));
   if (!s) return res.status(401).json({ error: 'Belum login' });
-  res.json({ user: s.user });
+  res.json({ user: s.user, role: s.role, events: s.events, whatsappEnabled,
+    canDelete: !serverMode || s.role === 'superadmin' });
 });
 
 app.post('/api/login', express.json(), async (req, res) => {
@@ -202,32 +226,93 @@ app.post('/api/logout', (req, res) => {
   res.json({ ok: true });
 });
 
+// Manajemen akun hanya di VPS; operator booth tetap memakai login lama.
+app.get('/api/users', requireAuth, requireSuper, (req, res) => {
+  if (!serverMode) return res.status(404).json({ error: 'Tidak tersedia di booth' });
+  res.json({ users: auth.listUsers() });
+});
+
+app.post('/api/users', requireAuth, requireSuper, express.json({ limit: '32kb' }), (req, res) => {
+  if (!serverMode) return res.status(404).json({ error: 'Tidak tersedia di booth' });
+  const { username, password, role } = req.body || {};
+  const events = validatedEvents((req.body || {}).events || []);
+  if (!/^[A-Za-z0-9._-]{3,40}$/.test(username || '') || typeof password !== 'string' || password.length < 8 ||
+      !['admin', 'superadmin'].includes(role) || !events || (role === 'admin' && !events.length)) {
+    return res.status(400).json({ error: 'Username, password (min. 8 karakter), role, atau event tidak valid' });
+  }
+  try { res.status(201).json({ user: auth.createUser(username, password, role, role === 'admin' ? events : []) }); }
+  catch (err) { res.status(409).json({ error: err.message }); }
+});
+
+app.put('/api/users/:username', requireAuth, requireSuper, express.json({ limit: '32kb' }), (req, res) => {
+  if (!serverMode) return res.status(404).json({ error: 'Tidak tersedia di booth' });
+  const current = auth.getUser(req.params.username);
+  if (!current) return res.status(404).json({ error: 'User tidak ditemukan' });
+  const body = req.body || {};
+  const role = body.role === undefined ? current.role : body.role;
+  const username = body.username === undefined ? current.username : body.username;
+  const events = body.events === undefined ? current.events : validatedEvents(body.events);
+  if (!/^[A-Za-z0-9._-]{3,40}$/.test(username || '') || !['admin', 'superadmin'].includes(role) ||
+      !events || (role === 'admin' && !events.length) ||
+      (body.password !== undefined && (typeof body.password !== 'string' || body.password.length < 8))) {
+    return res.status(400).json({ error: 'Role, event, atau password (min. 8 karakter) tidak valid' });
+  }
+  if (req.params.username === req.operator.user && role !== 'superadmin') {
+    return res.status(400).json({ error: 'Tidak dapat menurunkan role diri sendiri' });
+  }
+  try { res.json({ user: auth.updateUser(req.params.username, { username, role, events: role === 'admin' ? events : [], password: body.password }) }); }
+  catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+app.delete('/api/users/:username', requireAuth, requireSuper, (req, res) => {
+  if (!serverMode) return res.status(404).json({ error: 'Tidak tersedia di booth' });
+  if (req.params.username === req.operator.user) return res.status(400).json({ error: 'Tidak dapat menghapus diri sendiri' });
+  try { auth.deleteUser(req.params.username); res.json({ ok: true }); }
+  catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+app.post('/api/me/password', requireAuth, express.json({ limit: '8kb' }), (req, res) => {
+  if (!serverMode) return res.status(404).json({ error: 'Tidak tersedia di booth' });
+  const { currentPassword, newPassword } = req.body || {};
+  if (typeof currentPassword !== 'string' || !auth.verify(req.operator.user, currentPassword)) {
+    return res.status(400).json({ error: 'Password lama salah' });
+  }
+  if (typeof newPassword !== 'string' || newPassword.length < 8) {
+    return res.status(400).json({ error: 'Password baru minimal 8 karakter' });
+  }
+  auth.setPassword(req.operator.user, newPassword);
+  res.set('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; Max-Age=0`);
+  res.json({ ok: true });
+});
+
 // ---------- API ----------
 
 app.get('/api/status', requireAuth, (req, res) => {
-  const all = store.all();
+  const all = store.all().filter((s) => canManageEvent(req, s.event));
   const ready = all.filter((s) => !s.incomplete).length;
   res.json({
     ok: true,
-    rootDir: cfg.rootDir,
+    rootDir: isSuper(req) ? cfg.rootDir : 'Akses terbatas',
     port: cfg.port,
     photosPerSession: cfg.photosPerSession,
     singleToPrintWindowSec: cfg.singleToPrintWindowSec,
     lanUrl: lanUrl(),
+    whatsappEnabled,
     scanning: scanner.state.scanning,
     startedAt: scanner.state.startedAt,
     lastScanAt: scanner.state.lastScanAt || store.data.lastScan,
-    events: scanner.state.events,
+    events: scanner.state.events.filter((e) => canManageEvent(req, e)),
     counts: { total: all.length, ready, incomplete: all.length - ready },
-    pendingUploads: pending.count(),
-    cloud: cloudSync.state,
-    errors: scanner.state.errors.slice(-10)
+    pendingUploads: isSuper(req) ? pending.count() : 0,
+    cloud: isSuper(req) ? cloudSync.state : { enabled: false },
+    errors: isSuper(req) ? scanner.state.errors.slice(-10) : []
   });
 });
 
 app.get('/api/events', requireAuth, (req, res) => {
   const byEvent = {};
   for (const s of store.all()) {
+    if (!canManageEvent(req, s.event)) continue;
     const e = (byEvent[s.event] = byEvent[s.event] || { name: s.event, total: 0, ready: 0, incomplete: 0, pending: 0 });
     e.total++;
     if (s.incomplete) e.incomplete++;
@@ -247,7 +332,8 @@ app.get('/api/events', requireAuth, (req, res) => {
 // catatan: path sengaja bukan "/stats" — kadang diblokir ekstensi pemblokir di browser
 app.get('/api/angka', requireAuth, (req, res) => {
   const event = String(req.query.event || '').trim();
-  const all = store.all();
+  const all = store.all().filter((s) => canManageEvent(req, s.event));
+  if (event && !canManageEvent(req, event)) return res.status(403).json({ error: 'Event tidak diizinkan' });
   const list = event ? all.filter((s) => s.event === event) : all;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -274,6 +360,8 @@ app.get('/api/sessions', requireAuth, (req, res) => {
   const q = String(req.query.q || '').trim().toLowerCase();
 
   let list = store.all();
+  list = list.filter((s) => canManageEvent(req, s.event));
+  if (event && !canManageEvent(req, event)) return res.status(403).json({ error: 'Event tidak diizinkan' });
   if (event) list = list.filter((s) => s.event === event);
   if (status === 'ready') list = list.filter((s) => !s.incomplete);
   if (status === 'incomplete') list = list.filter((s) => s.incomplete);
@@ -299,9 +387,9 @@ app.get('/api/sessions/:id', (req, res) => {
   res.status(404).json({ error: 'Sesi belum tersedia', pending: false });
 });
 
-// ---------- Hapus sesi / foto (khusus admin yang sudah login) ----------
+// ---------- Hapus sesi / foto (superadmin VPS atau operator booth) ----------
 
-app.delete('/api/sessions/:id/file', requireAuth, (req, res) => {
+app.delete('/api/sessions/:id/file', requireAuth, requireSuper, (req, res) => {
   const s = store.get(req.params.id);
   if (!s) return res.status(404).json({ error: 'Sesi tidak ditemukan' });
   const rel = String(req.query.p || '');
@@ -322,7 +410,7 @@ app.delete('/api/sessions/:id/file', requireAuth, (req, res) => {
   res.json({ ok: true, deleted });
 });
 
-app.delete('/api/sessions/:id', requireAuth, (req, res) => {
+app.delete('/api/sessions/:id', requireAuth, requireSuper, (req, res) => {
   const s = store.get(req.params.id);
   const cancelled = pending.remove(req.params.id);
   if (!s) {
@@ -387,7 +475,7 @@ app.get('/api/events/:event', (req, res) => {
   });
 });
 
-app.post('/api/rescan', requireAuth, async (req, res) => {
+app.post('/api/rescan', requireAuth, requireSuper, async (req, res) => {
   try {
     await scanner.rescanAll();
     res.json({ ok: true, lastScanAt: scanner.state.lastScanAt });
@@ -605,6 +693,24 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'login.html'));
 });
 
+app.get('/users', requireAuth, requireSuper, (req, res) => {
+  if (!serverMode) return res.status(404).send('Tidak tersedia di booth');
+  res.sendFile(path.join(PUBLIC_DIR, 'users.html'));
+});
+app.get('/users.html', requireAuth, requireSuper, (req, res) => {
+  if (!serverMode) return res.status(404).send('Tidak tersedia di booth');
+  res.sendFile(path.join(PUBLIC_DIR, 'users.html'));
+});
+
+app.get('/account', requireAuth, (req, res) => {
+  if (!serverMode) return res.status(404).send('Tidak tersedia di booth');
+  res.sendFile(path.join(PUBLIC_DIR, 'account.html'));
+});
+app.get('/account.html', requireAuth, (req, res) => {
+  if (!serverMode) return res.status(404).send('Tidak tersedia di booth');
+  res.sendFile(path.join(PUBLIC_DIR, 'account.html'));
+});
+
 app.get('/s/:id', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'session.html'));
 });
@@ -641,6 +747,12 @@ app.get('/api/stream', requireAuth, (req, res) => {
   res.write('event: hello\ndata: {}\n\n');
 
   const onChange = (payload) => {
+    const current = auth.getSession(tokenOf(req));
+    if (!current) { res.end(); return; }
+    req.operator = current;
+    if (payload.event !== '* cloud' && !canManageEvent(req, payload.event)) return;
+    if (payload.event === '* cloud' && !isSuper(req) &&
+        !(payload.changed || []).some((id) => { const s = store.get(id); return s && canManageEvent(req, s.event); })) return;
     try { res.write('event: change\ndata: ' + JSON.stringify(payload) + '\n\n'); } catch (_) {}
   };
   const onState = () => {

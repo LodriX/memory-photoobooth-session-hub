@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Epilogue:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
   <link rel="icon" type="image/png" href="/logo.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 </head>
 <body>
   <header class="topbar">
@@ -23,6 +24,8 @@
       <span id="live-badge" class="badge live off">MEMUAT</span>
       <button id="lan-chip" class="chip" title="Klik untuk menyalin alamat galeri">&mdash;</button>
       <button id="btn-rescan" class="btn ghost">REFRESH</button>
+      <a id="btn-users" class="btn ghost hidden" href="/users">Kelola user</a>
+      <a id="btn-account" class="btn ghost hidden" href="/account">Ganti password</a>
       <button id="btn-logout" class="btn ghost" title="Keluar dari dashboard">Keluar</button>
     </div>
   </header>
@@ -74,6 +77,7 @@
     </div>
   </div>
 
+  <script src="/whatsapp.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

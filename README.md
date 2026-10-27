@@ -22,7 +22,7 @@ Satu aplikasi, dua peran:
 - [Login operator](#login-operator)
 - [Alur pemakaian harian](#alur-pemakaian-harian)
 - [QR sesi & QR event](#qr-sesi--qr-event)
-- [Hapus sesi / foto (khusus admin)](#hapus-sesi--foto-khusus-admin)
+- [Hapus sesi / foto (khusus superadmin VPS)](#hapus-sesi--foto-khusus-superadmin-vps)
 - [Cara pengelompokan sesi](#cara-pengelompokan-sesi)
 - [Konfigurasi](#konfigurasi)
 - [Unggah otomatis ke VPS + domain](#unggah-otomatis-ke-vps--domain)
@@ -43,7 +43,7 @@ Satu aplikasi, dua peran:
 - **Galeri tamu + QR** per sesi. QR dibuat saat halaman dibuka, jadi selalu mengikuti alamat server terkini.
 - **QR langsung aktif**: begitu sesi selesai, booth memesan (reserve) sesi ke server. Tamu bisa scan QR sebelum file selesai diunggah; halaman menampilkan status loading dan terisi otomatis.
 - **Galeri event + QR utama**: satu QR untuk semua sesi dalam event (`/e/<event>`), termasuk sesi yang masih diunggah. Tombol **QR Event** tersedia di dashboard.
-- **Hapus sesi/foto (khusus admin)**: tombol hapus hanya muncul setelah login; endpoint `DELETE` wajib autentikasi.
+- **Hapus sesi/foto**: di VPS khusus superadmin; pada booth lokal tetap untuk operator yang login.
 - **Unduh** per foto, template, **ZIP satu sesi**, dan **kolase PNG** (foto + QR; tata letak menyesuaikan jumlah foto, tanpa sel kosong).
 - **Dashboard operator**: login, pilih event, statistik per event, kartu sesi *live* (SSE), rescan, status unggah.
 - **Statistik per event**: total sesi, siap/lengkap, belum lengkap, terunggah.
@@ -52,6 +52,9 @@ Satu aplikasi, dua peran:
 - **Upload efisien**: koneksi HTTPS dipakai ulang, reserve berjalan bersamaan dengan upload, dan beberapa sesi dapat diunggah paralel (`cloud.concurrency`, default 3).
 - **Prune reserve yatim**: booth mengirim daftar ID valid; server menghapus kartu *pending* lama yang tidak punya pasangan lokal (mis. print dibuat ulang) setelah umurnya 10 menit.
 - **Tema soft romantic**, responsif di HP, iPad mini, dan desktop.
+- **Kirim link sesi via WhatsApp** dari dashboard dan halaman sesi (operator VPS): isi nomor penerima, lalu WhatsApp terbuka dengan pesan siap kirim.
+- **Manajemen akun VPS**: superadmin mengelola user; admin hanya melihat dan membagikan sesi dari event yang ditugaskan; setiap akun dapat mengganti password sendiri.
+- **Apple Touch Icon** dari simbol logo untuk shortcut Safari di layar utama iPhone/iPad.
 - **Watchdog**: `start.cmd` menghidupkan ulang server otomatis, plus heartbeat dan `data/error.log` untuk diagnosa.
 
 ## Arsitektur
@@ -121,6 +124,38 @@ login dari IP yang sama, login dikunci 10 menit.
 Halaman tamu (`/s/<id>`, QR, unduh ZIP) **publik** — supaya QR yang sudah dicetak
 tetap berfungsi tanpa login. Dashboard dan API operator wajib login.
 
+### Peran dan manajemen user di server online
+
+Pada VPS, akun lama otomatis menjadi **superadmin** saat versi ini pertama kali
+berjalan; password tetap sama. Superadmin dapat membuka **Kelola user** (`/users`)
+untuk membuat, melihat, mengedit, menghapus akun, mengatur role dan event admin,
+serta mereset password admin. Superadmin juga dapat menghapus sesi/foto dan rescan.
+Superadmin terakhir tidak bisa dihapus atau diturunkan rolenya.
+
+**Admin event** hanya melihat dashboard, statistik, dan sesi dari event yang
+ditugaskan. Admin dapat membagikan link sesi event tersebut lewat WhatsApp, tetapi
+tidak dapat menghapus media, rescan, atau mengelola user. Galeri tamu dan API
+event publik tetap dapat dibuka siapa pun sesuai perilaku QR sebelumnya.
+Sistem role ini hanya berlaku di VPS; login booth lokal tidak berubah.
+
+Setiap akun VPS dapat memakai **Ganti password** (`/account`) dengan password
+lamanya. Perubahan password, reset oleh superadmin, atau penghapusan user
+langsung membatalkan sesi login user tersebut; login kembali diperlukan.
+
+### Kirim link via WhatsApp
+
+Di dashboard VPS, klik **Kirim via WhatsApp** pada kartu sesi; di detail sesi
+tombol yang sama tersedia saat login sebagai superadmin atau admin yang ditugaskan
+ke event tersebut. Masukkan nomor HP Indonesia (`08…`, `62…`, atau `+62…`).
+Aplikasi membuka `wa.me` di tab baru dengan link **satu sesi** terisi di pesan.
+Periksa penerima, lalu tekan **Kirim** di WhatsApp. Pesan tidak dikirim otomatis
+dan nomor penerima tidak disimpan oleh SessionHub. Link sesi pending juga dapat
+dibagikan; tamu melihat halaman loading sampai foto selesai diunggah.
+
+Di Safari iPad/iPhone, **Add to Home Screen** kini memakai simbol logo.
+Shortcut lama yang masih menampilkan huruf “M” perlu dihapus dan dibuat ulang
+setelah update server agar ikon baru digunakan.
+
 ## Alur pemakaian harian
 
 1. Nyalakan PC booth → `start.cmd` berjalan → cek dashboard di `http://localhost:3800`.
@@ -137,10 +172,10 @@ tetap berfungsi tanpa login. Dashboard dan API operator wajib login.
 - Halaman event menyegarkan diri otomatis; tamu tidak perlu scan ulang ketika upload selesai.
 - Cetak QR event besar-besar untuk diletakkan di meja registrasi; tamu bisa langsung memilih sesinya.
 
-## Hapus sesi / foto (khusus admin)
+## Hapus sesi / foto (khusus superadmin VPS)
 
-- Login sebagai operator, lalu buka dashboard atau halaman sesi.
-- Tombol **Hapus** hanya muncul saat login; endpoint `DELETE` juga menolak request tanpa sesi login (401).
+- Login sebagai superadmin VPS, lalu buka dashboard atau halaman sesi. Di booth lokal, operator tetap dapat menghapus.
+- Tombol **Hapus** hanya muncul bagi akun yang berwenang; endpoint `DELETE` menolak request tanpa login (401) atau admin event (403).
 - **Hapus foto** menghapus satu file + thumbnail. **Hapus sesi** menghapus seluruh foto, template, dan QR print sesi tersebut.
 - File dihapus permanen dari folder `rootDir` server yang sedang dipakai.
 - Jika sesi masih dalam proses upload dari booth, unggahan yang berjalan bisa memunculkannya kembali. Tunggu upload selesai sebelum menghapus sesi uji.
@@ -259,6 +294,8 @@ Yang **tidak** otomatis:
 | URL | Akses | Fungsi |
 |---|---|---|
 | `/login` | publik | Halaman login operator. |
+| `/users` | superadmin VPS | CRUD user, role, penugasan event, reset password. |
+| `/account` | operator VPS | Ganti password akun sendiri. |
 | `/` | operator | Dashboard (event, statistik, kartu sesi, rescan). |
 | `/s/<id>` | publik | Galeri tamu satu sesi; menampilkan loading bila upload belum selesai. |
 | `/s/<id>/qr.png` | publik | Gambar QR sesi (bisa dibuat sebelum sesi terindeks). |
@@ -270,8 +307,10 @@ Yang **tidak** otomatis:
 | `/api/events/<event>` | publik | Data sesi untuk halaman event. |
 | `/api/status`, `/api/events`, `/api/sessions`, `/api/rescan`, `/api/stream` | operator | API dashboard / live update. |
 | `/api/angka?event=...` | operator | Statistik per event (`/api/stats` tetap tersedia sebagai alias). |
-| `DELETE /api/sessions/<id>` | operator | Hapus sesi + semua file. |
-| `DELETE /api/sessions/<id>/file?p=...` | operator | Hapus satu file/foto sesi. |
+| `DELETE /api/sessions/<id>` | superadmin VPS / operator booth | Hapus sesi + semua file. |
+| `DELETE /api/sessions/<id>/file?p=...` | superadmin VPS / operator booth | Hapus satu file/foto sesi. |
+| `/api/users`, `/api/users/<username>` | superadmin VPS | Daftar, buat, ubah, hapus user. |
+| `POST /api/me/password` | operator VPS | Ganti password sendiri (wajib password lama). |
 | `/api/push/reserve` | server (Bearer token) | Booth memesan sesi agar QR langsung aktif. |
 | `/api/push` | server (Bearer token) | Menerima unggahan sesi dari booth. |
 | `/api/push/prune` | server (Bearer token) | Menghapus reserve yatim yang tidak ada di daftar ID booth. |
@@ -317,6 +356,10 @@ SessionHub/
 │  ├─ net.js           # deteksi IP LAN
 │  └─ config.js        # pemuatan konfigurasi
 ├─ public/             # dashboard, halaman sesi, halaman event, login, tema
+│  ├─ users.html/js     # manajemen user superadmin VPS
+│  ├─ account.html/js   # ganti password akun VPS
+│  ├─ whatsapp.js       # dialog nomor + link wa.me
+│  └─ apple-touch-icon.png # ikon Home Screen iPhone/iPad
 ├─ scripts/            # validate.js, setpass.js
 ├─ deploy/             # Caddyfile, systemd service, install-ubuntu.sh
 └─ data/               # sessions, pending, users, log, media (tidak masuk git)
@@ -353,7 +396,7 @@ Ringkasan snapshot **25 Oktober 2026**:
 | Halaman sesi terus **Menyiapkan sesi** | Upload belum selesai atau reserve belum diterima server. Cek koneksi, `cloud.token`, dan log `[reserve]`/`[cloud]`. Halaman mencoba otomatis; tombol **Coba lagi** muncul setelah ±2 menit. |
 | Kartu pending lama tetap muncul | Reserve yatim dari sesi yang ID-nya berubah. Setelah VPS memakai versi prune, booth akan menghapusnya otomatis saat pengecekan berikutnya. Tanpa prune, entri hilang setelah 24 jam. |
 | QR Event / `/e/...` 404 | Server VPS masih versi lama. Deploy update lalu `systemctl restart sessionhub`. |
-| Tombol **Hapus** tidak muncul | Anda belum login sebagai operator. Hapus memang khusus admin; endpoint mengembalikan 401 tanpa login. |
+| Tombol **Hapus** tidak muncul | Di VPS tombol hanya untuk superadmin. Tanpa login endpoint mengembalikan 401; admin event menerima 403. |
 | Sesi online dianggap belum lengkap | `photosPerSession` di server berbeda dengan booth. Samakan nilainya lalu rescan/restart server. |
 | Unggah ke VPS tidak jalan | Cek `cloud.enabled`, `cloud.url`, `cloud.token`, dan status cloud di `/api/status`. |
 | Log `[cloud] reserve gagal ... fetch failed` | Koneksi booth ke VPS terputus sesaat. Reserve dicoba ulang otomatis, upload tetap dilanjutkan, dan antrean akan retry. Bila sering, cek WiFi/ISP booth dan pastikan VPS tidak restart. |
