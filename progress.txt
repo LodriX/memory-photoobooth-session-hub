@@ -22,3 +22,4 @@
 - (Fixed) public/app.js — tampilkan badge foto positif pada sesi 2–3 foto yang lengkap.
 - (Modified) GLOSSARY.md — samakan istilah Template QR dengan label galeri.
 - (Modified) lib/scanner.js — samakan komentar Template QR dengan glossary.
+- (Modified) test/scanner.test.js — samakan nama test dan pesan assertion dengan istilah Template QR.

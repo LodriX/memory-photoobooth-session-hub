@@ -140,7 +140,7 @@ test('lima foto sebelum satu template: 4 dipakai, 1 jadi sesi tanpa print', asyn
   ]);
 });
 
-test('varian template _1x/_2x disatukan, QR print dan thumbnail ikut terdeteksi', async (t) => {
+test('varian template _1x/_2x disatukan, Template QR dan thumbnail ikut terdeteksi', async (t) => {
   const root = setupTree([
     'Wedding/Singles/20240101_120001_000.jpg',
     'Wedding/Singles/20240101_120011_000.jpg',
@@ -165,7 +165,7 @@ test('varian template _1x/_2x disatukan, QR print dan thumbnail ikut terdeteksi'
   assert.ok(variants.includes('1x'), 'varian 1x ada');
   assert.ok(variants.includes('2x'), 'varian 2x ada');
   assert.ok(variants.includes(null), 'print utama tanpa varian ada');
-  assert.ok(s.qrPrint, 'qrPrint terdeteksi');
+  assert.ok(s.qrPrint, 'Template QR terdeteksi');
   assert.ok(s.photos[0].thumb, 'thumbnail terpasang untuk foto pertama');
   assert.equal(s.photos.filter((p) => p.path.endsWith('.CR2')).length, 0);
   assert.equal(s.photos.filter((p) => p.path.endsWith('.txt')).length, 0);
