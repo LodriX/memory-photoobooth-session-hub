@@ -1,0 +1,12 @@
+## 2026-11-05
+
+- (Created) AGENTS.md — arahkan agent ke konfigurasi issue tracker, label triage, dan domain docs.
+- (Created) docs/agents/issue-tracker.md — catat alur GitHub Issues untuk repo ini.
+- (Created) docs/agents/triage-labels.md — petakan lima label triage standar.
+- (Created) docs/agents/domain.md — catat tata letak dan aturan baca dokumen domain.
+- (Fixed) lib/scanner.js — kenali tiga format nama foto dan anggap sesi ber-Template serta berfoto sebagai lengkap.
+- (Modified) package.json — tambahkan perintah tes otomatis.
+- (Modified) scripts/validate.js — jelaskan batas maksimum foto per sesi dalam output.
+- (Created) test/scanner.test.js — uji pengelompokan foto, Template, leftover, dan varian file.
+- (Modified) public/session.html — hilangkan asumsi empat foto pada teks awal tombol kolase.
+- (Fixed) public/session.js — sesuaikan kolase dengan jumlah foto, QR same-origin, footer, dan label LumaBooth.

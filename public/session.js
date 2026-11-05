@@ -163,7 +163,7 @@ function render() {
     label: 'Template' + (p.variant ? ' ' + p.variant : (s.prints.length > 1 ? ' ' + (i + 1) : '')),
     path: p.path
   }));
-  if (s.qrPrint) files.push({ label: 'Template QR (DSLRBooth)', path: s.qrPrint });
+  if (s.qrPrint) files.push({ label: 'Template QR (LumaBooth)', path: s.qrPrint });
   $('files').innerHTML = files.map((f) => `
     <li>
       <span class="f-label">
@@ -172,8 +172,19 @@ function render() {
       <a class="btn small ghost" href="/file?p=${encodeURIComponent(f.path)}&download=1">Unduh</a>
     </li>`).join('');
 
-  $('btn-collage').onclick = makeCollage;
+  const btnCollage = $('btn-collage');
+  if (s.photos.length) {
+    btnCollage.classList.remove('hidden');
+    btnCollage.textContent = collageLabel(s.photos.length);
+    btnCollage.onclick = makeCollage;
+  } else {
+    btnCollage.classList.add('hidden');
+  }
   $('btn-zip').onclick = downloadZip;
+}
+
+function collageLabel(n) {
+  return `Unduh kolase (${n} foto + QR)`;
 }
 
 // ---------- ZIP: unduh semua file sesi dengan progress ----------
@@ -241,7 +252,7 @@ function downloadZip() {
   }
 }
 
-// ---------- Kolase: 4 foto + QR, digambar di canvas browser ----------
+// ---------- Kolase: jumlah foto sesi + QR, digambar di canvas browser ----------
 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
@@ -273,11 +284,22 @@ function drawCover(ctx, img, x, y, w, h) {
 
 async function makeCollage() {
   const btn = $('btn-collage');
+  const sources = session.photos.map((p) => p.path);
+  if (!sources.length) return;
   btn.disabled = true;
   btn.textContent = 'Membuat kolase...';
   try {
     const W = 1200;
-    const H = 1800;
+    const margin = 34;
+    const gap = 18;
+    const cols = sources.length > 1 ? 2 : 1;
+    const rows = Math.ceil(sources.length / cols);
+    const cellW = (W - margin * 2 - (cols - 1) * gap) / cols;
+    const cellH = Math.round(cellW * 4 / 3);
+    const gridH = rows * cellH + (rows - 1) * gap;
+    const footerY = margin + gridH + 26;
+    const footerH = 390;
+    const H = footerY + footerH;
     const canvas = document.createElement('canvas');
     canvas.width = W;
     canvas.height = H;
@@ -286,26 +308,18 @@ async function makeCollage() {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, W, H);
 
-    const margin = 34;
-    const gap = 18;
-    const cellW = (W - margin * 2 - gap) / 2;
-    const cellH = Math.round(cellW * 4 / 3);
-    const gridH = cellH * 2 + gap;
-    const footerY = margin + gridH + 26;
-
-    const sources = session.photos.map((p) => p.path);
-    for (const p of session.prints) {
-      if (sources.length >= 4) break;
-      sources.push(p.path);
-    }
     const imgs = [];
-    for (const src of sources.slice(0, 4)) {
+    for (const src of sources) {
       try { imgs.push(await loadImage(mediaUrl(src))); } catch (_) {}
     }
 
     for (let i = 0; i < imgs.length; i++) {
-      const cx = margin + (i % 2) * (cellW + gap);
-      const cy = margin + Math.floor(i / 2) * (cellH + gap);
+      const row = Math.floor(i / cols);
+      const idxInRow = i % cols;
+      const colsInRow = Math.min(cols, sources.length - row * cols);
+      const rowW = colsInRow * cellW + (colsInRow - 1) * gap;
+      const cx = (W - rowW) / 2 + idxInRow * (cellW + gap);
+      const cy = margin + row * (cellH + gap);
       ctx.save();
       ctx.beginPath();
       ctx.rect(cx, cy, cellW, cellH);
@@ -315,7 +329,6 @@ async function makeCollage() {
     }
 
     // footer
-    const footerH = H - footerY;
     const grad = ctx.createLinearGradient(0, footerY, 0, H);
     grad.addColorStop(0, '#0f9b9b');
     grad.addColorStop(1, '#0b7f86');
@@ -329,10 +342,11 @@ async function makeCollage() {
 
     ctx.font = '600 58px "Fraunces", Georgia, serif';
     let name = (session.event || '').toUpperCase();
-    while (name && ctx.measureText(name).width > W - 60 && ctx.font.indexOf('58px') > -1) {
+    const titleWidth = W - 2 * (190 + margin + 26);
+    while (name && ctx.measureText(name).width > titleWidth && ctx.font.indexOf('58px') > -1) {
       ctx.font = '600 38px "Fraunces", Georgia, serif';
     }
-    if (name) ctx.fillText(name, W / 2, footerY + 126);
+    if (name) ctx.fillText(name, W / 2, footerY + 126, titleWidth);
 
     // logo Memory Photobooth di footer kolase
     try {
@@ -343,9 +357,9 @@ async function makeCollage() {
     } catch (_) {}
 
     try {
-      const qr = await loadImage(session.qr + '?size=420&cb=' + Date.now());
+      const qr = await loadImage('/s/' + encodeURIComponent(session.id) + '/qr.png?size=420&cb=' + Date.now());
       const qs = 190;
-      const qx = (W - qs) / 2;
+      const qx = W - margin - qs - 10;
       const qy = footerY + footerH - qs - 26;
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(qx - 10, qy - 10, qs + 20, qs + 20);
@@ -363,7 +377,7 @@ async function makeCollage() {
     toast('Gagal membuat kolase: ' + err.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Unduh kolase (4 foto + QR)';
+    btn.textContent = collageLabel(session.photos.length);
   }
 }
 
