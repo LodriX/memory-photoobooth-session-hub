@@ -10,3 +10,12 @@
 - (Created) test/scanner.test.js — uji pengelompokan foto, Template, leftover, dan varian file.
 - (Modified) public/session.html — hilangkan asumsi empat foto pada teks awal tombol kolase.
 - (Fixed) public/session.js — sesuaikan kolase dengan jumlah foto, QR same-origin, footer, dan label LumaBooth.
+- (Modified) README.md — perjelas pola foto LumaBooth, sesi 2–4 foto, dan konfigurasi maksimum foto.
+- (Modified) DEPLOY.md — sesuaikan diagram dan uji upload dengan sesi berjumlah foto variatif.
+- (Modified) package.json — perbarui deskripsi aplikasi ke LumaBooth.
+- (Modified) server.js — perbarui banner saat server dimulai ke LumaBooth.
+- (Modified) public/index.html — perbarui teks kosong dashboard ke LumaBooth.
+- (Modified) lib/scanner.js — perbarui komentar QR print ke LumaBooth.
+- (Modified) deploy/sessionhub.service — perbarui deskripsi service ke LumaBooth.
+- (Modified) deploy/install-ubuntu.sh — perbarui deskripsi service yang dibuat installer ke LumaBooth.
+- (Created) GLOSSARY.md — definisikan istilah domain Event, Sesi, Single, Print, Template, QR, Original, Animated, dan sesi tanpa print.

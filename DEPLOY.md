@@ -3,9 +3,9 @@
 Gambaran:
 
 ```
-[PC Booth + DSLRBooth]                        [VPS Ubuntu + domain, online 24/7]
+[PC Booth + LumaBooth]                         [VPS Ubuntu + domain, online 24/7]
 SessionHub lokal (monitor + QR lokal)
-   └─ sesi lengkap (4 foto + print)
+   └─ sesi lengkap (2–4 foto + print)
         └─ UPLOAD otomatis (HTTPS + token) ──►  SessionHub server
                                                  ├─ menyimpan file di /opt/sessionhub/data/media
                                                  ├─ galeri: https://domain.com/s/<id>
@@ -125,7 +125,7 @@ muncul dengan sertifikat HTTPS otomatis.
 2. Buat satu sesi photobooth (atau tunggu sesi berikutnya).
 3. Di dashboard booth, kartu sesi akan mendapat tag **☁ online**.
 4. Cek `https://domain-anda.com/s/<id>` dari HP (pakai data seluler, bukan WiFi booth)
-   — 4 foto + print tampil, QR bisa discan.
+   — foto + print sesi tampil, QR bisa discan.
 
 Uji manual endpoint push (opsional, dari mana saja):
 

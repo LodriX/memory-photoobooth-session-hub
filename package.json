@@ -1,7 +1,7 @@
 {
   "name": "sessionhub",
   "version": "1.0.0",
-  "description": "Monitor output DSLRBooth, gabungkan 4 foto + 1 print per sesi, tampilkan di web gallery + QR otomatis",
+  "description": "Pantau output LumaBooth, kelompokkan foto dan template per sesi, tampilkan galeri web dengan QR otomatis",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

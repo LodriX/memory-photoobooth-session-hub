@@ -433,7 +433,7 @@ scanner.on('error', (err) => console.error('[scan]', err.message));
 
 (async () => {
   console.log('==============================================');
-  console.log(' SessionHub - DSLRBooth Session Uploader');
+  console.log(' SessionHub - LumaBooth Session Uploader');
   console.log('==============================================');
   console.log(' Root folder :', cfg.rootDir);
   try {

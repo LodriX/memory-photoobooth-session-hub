@@ -60,7 +60,7 @@ EOF
 echo "== 5/5 systemd =="
 cat > /etc/systemd/system/sessionhub.service <<EOF
 [Unit]
-Description=SessionHub - DSLRBooth session uploader
+Description=SessionHub - LumaBooth session uploader
 After=network.target
 
 [Service]

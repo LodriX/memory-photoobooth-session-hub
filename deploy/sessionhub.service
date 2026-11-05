@@ -1,6 +1,6 @@
 # Salinan template — installer membuat versi final di /etc/systemd/system/sessionhub.service
 [Unit]
-Description=SessionHub - DSLRBooth session uploader
+Description=SessionHub - LumaBooth session uploader
 After=network.target
 
 [Service]

@@ -1,14 +1,14 @@
-# SessionHub — Upload & Gabung Sesi DSLRBooth Otomatis
+# SessionHub — Upload & Gabung Sesi LumaBooth Otomatis
 
-Aplikasi web (Node.js) yang memantau folder output DSLRBooth:
+Aplikasi web (Node.js) yang memantau folder output LumaBooth (dahulu DSLRBooth):
 
 - Setiap foto baru (**Singles**) dan print baru (**Prints**) terdeteksi otomatis.
-- Foto digabung per sesi: **4 foto + 1 print** (atur di `config.json`).
+- Foto dikelompokkan per sesi: **2–4 foto + 1 print/template** (batas maksimum di `config.json`).
 - Tiap sesi langsung punya **halaman web** + **QR code otomatis** yang mengarah ke halaman tersebut.
-- Tamu scan QR → lihat 4 foto + print sesi mereka → bisa unduh.
-- Bonus: tombol **kolase** (4 foto + QR) diunduh sebagai 1 gambar PNG.
+- Tamu scan QR → lihat foto + template sesi mereka → bisa unduh.
+- Bonus: tombol **kolase** (foto sesi + QR) diunduh sebagai 1 gambar PNG.
 
-> Aplikasi ini **hanya membaca** folder DSLRBooth. Semua data aplikasi disimpan di
+> Aplikasi ini **hanya membaca** folder output LumaBooth. Semua data aplikasi disimpan di
 > `C:\dslrBooth\SessionHub\data\sessions.json`.
 
 ---
@@ -20,7 +20,7 @@ Aplikasi web (Node.js) yang memantau folder output DSLRBooth:
 3. Buka browser:
    - Di komputer booth: `http://localhost:3800`
    - Di HP (satu WiFi): `http://<IP-booth>:3800` (tertampil di tombol 🔗 di dashboard)
-4. Jalankan DSLRBooth seperti biasa. Sesi baru muncul sendiri di dashboard (LIVE).
+4. Jalankan LumaBooth seperti biasa. Sesi baru muncul sendiri di dashboard (LIVE).
 
 Agar HP/tamu bisa akses, jalankan **`add-firewall.cmd` sekali dengan klik kanan → Run as administrator**.
 
@@ -57,7 +57,7 @@ Aplikasi ini dipakai dalam **dua entitas** (software sama, beda peran):
 
 | | **1. Perangkat booth (Windows)** | **2. Server (VPS Ubuntu, lihat DEPLOY.md)** |
 |---|---|---|
-| Peran | Pantau DSLRBooth, kelompokkan sesi, dashboard login, QR, **unggah file ke server** | Terima upload (`/api/push`), sajikan halaman publik `/s/<id>` + login di domain |
+| Peran | Pantau LumaBooth, kelompokkan sesi, dashboard login, QR, **unggah file ke server** | Terima upload (`/api/push`), sajikan halaman publik `/s/<id>` + login di domain |
 | Saat restart | **Klik `start.cmd` saja**, biarkan jendelanya terbuka | **Otomatis** (systemd `sessionhub` + Caddy) |
 | Siapa mengakses | Operator (login `admin`) | Tamu via QR (tanpa login) + operator (login) |
 | Cek cepat | Buka `http://localhost:3800/login` → statistik terisi | `systemctl status sessionhub` → active (running) |
@@ -77,23 +77,29 @@ Aplikasi ini dipakai dalam **dua entitas** (software sama, beda peran):
 
 ## Cara kerja pengelompokan (grouping)
 
-- Nama file DSLRBooth memuat timestamp, contoh:
-  - `Singles\IMG_3551_20261011_122028_3600.JPG` → foto jam 12:20:28
+- Nama file LumaBooth memuat timestamp, contoh:
+  - `Singles\20250711_194816_203.jpg` → foto dengan timestamp polos
+  - `Singles\20250630_185357_765_3600.jpg` → foto dengan suffix tambahan
+  - `Singles\IMG_3551_20261011_122028_3600.JPG` → foto dengan prefix kamera
   - `Prints\20261011_122033_341.jpg` → print jam 12:20:33 (varian `_1x` / `_2x` disatukan)
-- Saat file print muncul, aplikasi mengambil **4 foto terakhir sebelum print**
-  (rentang maksimal `singleToPrintWindowSec`, default 150 detik) sebagai satu sesi.
+- Saat file print muncul, aplikasi mengambil foto-foto terakhir sebelum print,
+  paling banyak `photosPerSession` (default 4) dalam rentang `singleToPrintWindowSec`
+  (default 150 detik). Template dapat berisi 2, 3, atau 4 foto; jumlah pada
+  template tidak dibaca secara otomatis. Sesi dengan print dan minimal satu foto
+  ditandai lengkap.
 - ID sesi = timestamp print, mis. `20261011_122033_341`.
 - Foto yang tidak menemukan print (mis. print dimatikan / uji coba) tampil sebagai sesi
   **"tanpa print"** di dashboard, tetap bisa dibuka & di-QR-kan.
-- Jika ada `Prints\Qr\...jpg` dari DSLRBooth, file itu ikut ditampilkan sebagai "Print QR (DSLRBooth)".
+- Jika ada `Prints\Qr\...jpg` yang cocok dengan ID print dari LumaBooth,
+  file itu ikut ditampilkan sebagai "Template QR (LumaBooth)".
 
 Semua bisa diubah di `config.json`:
 
 | Key | Arti | Default |
 |---|---|---|
-| `rootDir` | Folder root DSLRBooth | `C:\dslrBooth` |
+| `rootDir` | Folder root output LumaBooth | `C:\dslrBooth` |
 | `port` | Port web | `3800` |
-| `photosPerSession` | Jumlah foto per sesi | `4` |
+| `photosPerSession` | Maksimum foto yang dipasangkan ke satu print (bukan jumlah tetap) | `4` |
 | `singleToPrintWindowSec` | Rentang foto→print | `150` |
 | `idleGapSec` | Tunggu sebelum anggap sesi selesai | `30` |
 | `leftoverClusterGapSec` | Jeda agar foto liar dianggap sesi terpisah | `300` |
@@ -105,7 +111,7 @@ Semua bisa diubah di `config.json`:
 npm run validate
 ```
 
-Menampilkan statistik per event: jumlah sesi, distribusi "4 foto + 1 print", "3 foto + 2 print", dst.
+Menampilkan statistik per event: jumlah sesi, distribusi "2 foto + 1 print", "3 foto + 1 print", dst.
 
 ---
 
@@ -157,8 +163,8 @@ schtasks /create /tn "SessionHub" /tr "C:\dslrBooth\SessionHub\start.cmd" /sc on
 ## Rencana lanjutan (bila diperlukan)
 
 - ~~**Upload ke website publik/cloud**~~ — sudah ada, lihat [DEPLOY.md](DEPLOY.md).
-- **QR tercetak otomatis di template** DSLRBooth (pakai folder `Prints\Qr` atau
-  QR dinamis di template DSLRBooth).
+- **QR tercetak otomatis di template** LumaBooth (pakai folder `Prints\Qr` atau
+  QR dinamis di template LumaBooth).
 - Galeri multi-event dengan filter tamu, kode akses, atau auto-delete setelah X hari.
 - Kompresi foto sebelum upload (hemat bandwidth) & pindah media ke object storage
   bila volume besar.
