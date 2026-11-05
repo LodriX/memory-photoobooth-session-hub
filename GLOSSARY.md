@@ -24,8 +24,9 @@ _Avoid_: Template mentah
 **QR sesi**:
 Kode yang membuka halaman galeri milik satu sesi ketika dipindai pengunjung.
 
-**QR print**:
+**Template QR**:
 Gambar QR tambahan dari hasil LumaBooth yang dapat menempel pada Print tertentu; berbeda dari QR sesi yang menuju halaman galeri.
+_Avoid_: QR print
 
 **Original**:
 Hasil tangkapan kamera sebelum menjadi Single yang ditampilkan kepada pengunjung; dapat tersedia dalam format foto atau RAW.

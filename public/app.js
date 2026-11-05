@@ -181,7 +181,7 @@ function cardHtml(s) {
     ? `<img class="thumb" loading="lazy" src="${mediaUrl(preview)}" onclick="openSession('${esc(s.id)}')" alt="" />`
     : `<div class="thumb"></div>`;
   const tags = [];
-  tags.push(`<span class="tag ${s.photoCount >= 4 ? 'ok' : 'warn'}">${s.photoCount} foto</span>`);
+  tags.push(`<span class="tag ${s.photoCount > 0 ? 'ok' : 'warn'}">${s.photoCount} foto</span>`);
   tags.push(`<span class="tag ${s.prints.length ? 'ok' : 'warn'}">${s.prints.length} template</span>`);
   tags.push(uploadTag(s));
   if (s.incomplete) tags.push('<span class="tag warn">belum lengkap</span>');

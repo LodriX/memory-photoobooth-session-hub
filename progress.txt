@@ -19,3 +19,6 @@
 - (Modified) deploy/sessionhub.service — perbarui deskripsi service ke LumaBooth.
 - (Modified) deploy/install-ubuntu.sh — perbarui deskripsi service yang dibuat installer ke LumaBooth.
 - (Created) GLOSSARY.md — definisikan istilah domain Event, Sesi, Single, Print, Template, QR, Original, Animated, dan sesi tanpa print.
+- (Fixed) public/app.js — tampilkan badge foto positif pada sesi 2–3 foto yang lengkap.
+- (Modified) GLOSSARY.md — samakan istilah Template QR dengan label galeri.
+- (Modified) lib/scanner.js — samakan komentar Template QR dengan glossary.
